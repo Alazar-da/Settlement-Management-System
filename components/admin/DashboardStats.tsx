@@ -14,10 +14,10 @@ interface DashboardStatsProps {
   stats: {
     totalRevenue: number;
     totalAgents: number;
-    pendingPayments: number;
+/*     pendingPayments: number;
     collectionRate: number;
-    fullyPaid: number;
-    unpaid: number;
+    fullyPaid: number; */
+    totalUnpaid: number;
   };
 }
 
@@ -37,7 +37,7 @@ export default function DashboardStats({
       icon: FiUsers,
       color: 'from-blue-500 to-cyan-600',
     },
-    {
+ /*    {
       title: 'Pending Payments',
       value: `$${stats.pendingPayments.toLocaleString()}`,
       icon: FiClock,
@@ -54,10 +54,10 @@ export default function DashboardStats({
       value: stats.fullyPaid,
       icon: FiCheckCircle,
       color: 'from-emerald-500 to-green-600',
-    },
+    }, */
     {
-      title: 'Unpaid',
-      value: stats.unpaid,
+      title: 'Total Unpaid',
+      value: `$${stats.totalUnpaid.toLocaleString()}`,
       icon: FiAlertCircle,
       color: 'from-red-500 to-rose-600',
     },
@@ -100,7 +100,7 @@ export default function DashboardStats({
                 </div>
               </div>
 
-              <div className="mt-6 h-2 w-full rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+            {/*   <div className="mt-6 h-2 w-full rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
                 <div
                   className={`h-full rounded-full bg-gradient-to-r ${card.color}`}
                   style={{
@@ -110,7 +110,7 @@ export default function DashboardStats({
                         : '70%',
                   }}
                 />
-              </div>
+              </div> */}
             </div>
           </motion.div>
         );

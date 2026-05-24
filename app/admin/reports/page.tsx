@@ -22,6 +22,8 @@ export default function ReportsPage() {
     fetchReports();
   }, []);
 
+  console.log('Settlements:', settlements);
+
   async function fetchReports() {
     const { data: settlementsData } =
       await supabase
@@ -61,7 +63,7 @@ export default function ReportsPage() {
       <KPISection settlements={settlements} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <RevenueTrendChart batches={batches} />
+        <RevenueTrendChart settlements={settlements} />
 
         <PaymentStatusChart
           settlements={settlements}
