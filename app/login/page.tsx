@@ -163,14 +163,14 @@ export default function LoginPage() {
               </div>
 
               {/* Forgot Password Link */}
-              <div className="flex justify-end">
+             {/*  <div className="flex justify-end">
                 <Link
                   href="/forgot-password"
                   className="text-sm text-primary-400 hover:text-primary-300 transition-colors"
                 >
                   Forgot password?
                 </Link>
-              </div>
+              </div> */}
 
               {/* Submit Button */}
               <button
@@ -193,7 +193,7 @@ export default function LoginPage() {
             </form>
 
             {/* Demo Credentials */}
-            <div className="mt-6 pt-6 border-t border-gray-700">
+          {/*   <div className="mt-6 pt-6 border-t border-gray-700">
               <p className="text-xs text-center text-gray-400 mb-3">
                 Demo Credentials (First Time Setup)
               </p>
@@ -208,10 +208,10 @@ export default function LoginPage() {
                   * For first-time setup, use these credentials or register a new account
                 </p>
               </div>
-            </div>
+            </div> */}
 
             {/* Register Link */}
-            <div className="text-center">
+         {/*    <div className="text-center">
               <p className="text-sm text-gray-400">
                 Don't have an account?{' '}
                 <Link
@@ -221,12 +221,12 @@ export default function LoginPage() {
                   Register now
                 </Link>
               </p>
-            </div>
+            </div> */}
           </div>
         </div>
 
         {/* Footer Features */}
-        <div className="mt-6 flex justify-center space-x-6">
+   {/*      <div className="mt-6 flex justify-center space-x-6">
           <div className="flex items-center space-x-1">
             <div className="w-1.5 h-1.5 rounded-full bg-green-500"></div>
             <span className="text-xs text-gray-400">Secure Connection</span>
@@ -239,7 +239,7 @@ export default function LoginPage() {
             <div className="w-1.5 h-1.5 rounded-full bg-purple-500"></div>
             <span className="text-xs text-gray-400">GDPR Compliant</span>
           </div>
-        </div>
+        </div> */}
       </motion.div>
     </div>
   );
