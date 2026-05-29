@@ -1,12 +1,10 @@
 'use client';
 
+import { formatCurrency } from '@/utils/formatCurrency';
 import { motion } from 'framer-motion';
 import {
   FiDollarSign,
   FiUsers,
-  FiClock,
-  FiTrendingUp,
-  FiCheckCircle,
   FiAlertCircle,
 } from 'react-icons/fi';
 
@@ -14,9 +12,6 @@ interface DashboardStatsProps {
   stats: {
     totalRevenue: number;
     totalAgents: number;
-/*     pendingPayments: number;
-    collectionRate: number;
-    fullyPaid: number; */
     totalUnpaid: number;
   };
 }
@@ -27,7 +22,7 @@ export default function DashboardStats({
   const cards = [
     {
       title: 'Total Revenue',
-      value: `$${stats.totalRevenue.toLocaleString()}`,
+      value: `${formatCurrency(stats.totalRevenue)}`,
       icon: FiDollarSign,
       color: 'from-green-500 to-emerald-600',
     },
@@ -37,27 +32,9 @@ export default function DashboardStats({
       icon: FiUsers,
       color: 'from-blue-500 to-cyan-600',
     },
- /*    {
-      title: 'Pending Payments',
-      value: `$${stats.pendingPayments.toLocaleString()}`,
-      icon: FiClock,
-      color: 'from-orange-500 to-red-500',
-    },
-    {
-      title: 'Collection Rate',
-      value: `${stats.collectionRate.toFixed(1)}%`,
-      icon: FiTrendingUp,
-      color: 'from-purple-500 to-pink-600',
-    },
-    {
-      title: 'Fully Paid',
-      value: stats.fullyPaid,
-      icon: FiCheckCircle,
-      color: 'from-emerald-500 to-green-600',
-    }, */
     {
       title: 'Total Unpaid',
-      value: `$${stats.totalUnpaid.toLocaleString()}`,
+      value: `${formatCurrency(stats.totalUnpaid)}`,
       icon: FiAlertCircle,
       color: 'from-red-500 to-rose-600',
     },

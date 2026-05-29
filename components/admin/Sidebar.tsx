@@ -29,6 +29,24 @@ const navItems = [
     icon: FiHome,
     description: 'Overview & analytics',
   },
+    {
+    name: 'Agents',
+    href: '/admin/agents',
+    icon: FiUsers,
+    description: 'Manage agents',
+  },
+    {
+    name: 'Cashiers',
+    href: '/admin/cashiers',
+    icon: FiTrendingUp,
+    description: 'Manage cashiers',
+  },
+  {
+    name: 'Systems',
+    href: '/admin/systems',
+    icon: FiSettings,
+    description: 'Manage system settings',
+  },
   {
     name: 'Reports',
     href: '/admin/reports',
@@ -75,7 +93,7 @@ export default function Sidebar({ isOpen, onClose, user, currentPath }: SidebarP
       </div>
 
       {/* User Info */}
-      <div className="p-6 border-b border-gray-700">
+ {/*      <div className="p-6 border-b border-gray-700">
         <div className="flex items-center space-x-3">
           <div className="w-12 h-12 rounded-full bg-gradient-to-r from-primary-500 to-secondary-500 flex items-center justify-center text-white font-bold text-lg">
             {user?.email?.charAt(0).toUpperCase() || 'A'}
@@ -87,7 +105,7 @@ export default function Sidebar({ isOpen, onClose, user, currentPath }: SidebarP
             <p className="text-xs text-gray-400 truncate">{user?.email}</p>
           </div>
         </div>
-      </div>
+      </div> */}
 
       {/* Navigation */}
       <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
@@ -99,7 +117,7 @@ export default function Sidebar({ isOpen, onClose, user, currentPath }: SidebarP
             <Link key={item.name} href={item.href} onClick={onClose}>
               <motion.div
                 whileHover={{ x: 5 }}
-                className={`flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
+                className={`flex items-center space-x-3 px-4 py-3 mb-1 rounded-xl transition-all duration-200 group ${
                   isActive
                     ? 'bg-gradient-to-r from-primary-600 to-secondary-600 text-white shadow-lg'
                     : 'text-gray-300 hover:bg-gray-700/50'
@@ -135,10 +153,10 @@ export default function Sidebar({ isOpen, onClose, user, currentPath }: SidebarP
         </button>
         
         {/* Version Info */}
-        <div className="mt-4 text-center">
+       {/*  <div className="mt-4 text-center">
           <p className="text-xs text-gray-500">Version 1.0.0</p>
           <p className="text-xs text-gray-600">© 2024 Settlement Pro</p>
-        </div>
+        </div> */}
       </div>
     </div>
   );

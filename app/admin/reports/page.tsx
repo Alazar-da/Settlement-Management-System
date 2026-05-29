@@ -9,12 +9,15 @@ import KPISection from '@/components/reports/KPISection';
 import RevenueTrendChart from '@/components/reports/RevenueTrendChart';
 import PaymentStatusChart from '@/components/reports/PaymentStatusChart';
 import SystemComparisonChart from '@/components/reports/SystemComparisonChart';
+import CachierSettlementReport from '@/components/reports/CashierSettlementReport';
+import RevenueReportTable from '@/components/reports/RevenueReportTable';
 import BatchReportTable from '@/components/reports/BatchReportTable';
 import TopAgentsTable from '@/components/reports/TopAgentsTable';
 import PaymentsTable from '@/components/reports/PaymentsTable';
 
 export default function ReportsPage() {
   const [settlements, setSettlements] = useState<any[]>([]);
+  const [agents, setAgents] = useState<any[]>([]);
   const [batches, setBatches] = useState<any[]>([]);
   const [payments, setPayments] = useState<any[]>([]);
 
@@ -32,6 +35,11 @@ export default function ReportsPage() {
           *,
           agents(name)
         `);
+
+        const { data: agentsData } =
+      await supabase
+        .from('agents')
+        .select('*');
 
     const { data: batchesData } =
       await supabase
@@ -54,13 +62,14 @@ export default function ReportsPage() {
         });
 
     setSettlements(settlementsData || []);
+    setAgents(agentsData || []);
     setBatches(batchesData || []);
     setPayments(paymentsData || []);
   }
 
   return (
     <div className="space-y-6 p-6">
-      <KPISection settlements={settlements} />
+      <KPISection settlements={settlements} agents={agents} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <RevenueTrendChart settlements={settlements} />
@@ -71,10 +80,14 @@ export default function ReportsPage() {
       </div>
 
       <SystemComparisonChart
-        settlements={settlements}
-      />
+        settlements={settlements} batches={batches} />
+    
 
-      <BatchReportTable
+      <CachierSettlementReport />
+
+      <RevenueReportTable />
+
+{/*       <BatchReportTable
         batches={batches}
         settlements={settlements}
       />
@@ -83,7 +96,7 @@ export default function ReportsPage() {
         settlements={settlements}
       />
 
-      <PaymentsTable payments={payments} />
+      <PaymentsTable payments={payments} /> */}
     </div>
   );
 }

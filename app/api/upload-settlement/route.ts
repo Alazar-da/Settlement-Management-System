@@ -1,6 +1,13 @@
 import { NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
+
 import { supabase } from '@/lib/supabase';
+
+// =========================
+// ROUND TO 2 DECIMALS
+// =========================
+const round2 = (num: number) =>
+  Number(num.toFixed(2));
 
 export async function POST(req: Request) {
   try {
@@ -8,147 +15,383 @@ export async function POST(req: Request) {
 
     const file = formData.get('file') as File;
 
-    const systemType = formData.get('systemType') as string;
+    const systemId = formData.get('systemId') as string;
 
-    const commission = Number(formData.get('commission'));
-
-    const systemPayment = Number(formData.get('systemPayment'));
+    const commission = Number(
+      formData.get('commission')
+    );
 
     const week = formData.get('week') as string;
 
     if (!file) {
       return NextResponse.json(
-        { error: 'No file uploaded' },
-        { status: 400 }
+        {
+          error: 'No file uploaded',
+        },
+        {
+          status: 400,
+        }
       );
     }
+
+    // =========================
+    // GET SYSTEM
+    // =========================
+
+    const { data: system } =
+      await supabase
+        .from('systems')
+        .select('*')
+        .eq('id', systemId)
+        .single();
+
+    if (!system) {
+      return NextResponse.json(
+        {
+          error: 'Invalid system',
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    // =========================
+    // CHECK DUPLICATE
+    // =========================
+
+    const { data: existingBatch } =
+      await supabase
+        .from('upload_batches')
+        .select('id')
+        .eq('system_id', systemId)
+        .eq('settlement_week', week)
+        .maybeSingle();
+
+    if (existingBatch) {
+      return NextResponse.json(
+        {
+          error:
+            'Settlement already uploaded for this week',
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    // =========================
+    // READ EXCEL
+    // =========================
 
     const bytes = await file.arrayBuffer();
 
     const workbook = XLSX.read(bytes);
 
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const sheet =
+      workbook.Sheets[workbook.SheetNames[0]];
 
-    const rows: any[] = XLSX.utils.sheet_to_json(sheet);
-    
+    const rows: any[][] =
+      XLSX.utils.sheet_to_json(sheet, {
+        header: 1,
+      });
 
-    const groupedAgents: any = {};
+    // =========================
+    // GROUP BY AGENT
+    // =========================
 
-  for (const row of rows) {
-  let rawAgentName = '';
-  let ggr = 0;
+const groupedAgents: any = {};
+const groupedCashiers: any = {};
 
-  if (systemType === 'KIRON2') {
-    rawAgentName = row['Shop'];
-    ggr = Number(row['GGR'] || 0);
-  } else {
-    rawAgentName = row['Master Agent'];
-    ggr = Number(row['GGR'] || 0);
-  }
+for (let i = 1; i < rows.length; i++) {
+  const row = rows[i];
 
-  // Clean agent name
-  const agentName = String(rawAgentName || '').trim();
+  // COLUMN B = CASHIER
+  const cashierName = String(
+    row[1] || ''
+  ).trim();
 
-  // Skip empty agents
-  if (!agentName) {
-    console.log('Skipped row with empty agent name:', row);
+  // COLUMN C = NET CASH
+  const netCash = round2(
+    Number(row[2] || 0)
+  );
+
+  if (!cashierName) continue;
+
+  if (isNaN(netCash)) continue;
+
+  // =========================
+  // FIND CASHIER
+  // =========================
+
+  const { data: cashier } =
+    await supabase
+      .from('cashiers')
+      .select(
+        `
+        *,
+        agents(*)
+      `
+      )
+      .ilike('name', cashierName)
+      .single();
+
+  if (!cashier) {
+    console.log(
+      `Cashier not found: ${cashierName}`
+    );
+
     continue;
   }
 
-  // Prevent invalid numbers
-  if (isNaN(ggr)) {
-    console.log('Skipped row with invalid GGR:', row);
-    continue;
-  }
+  const agentId = cashier.agent_id;
 
-  // Initialize grouped agent
-  if (!groupedAgents[agentName]) {
-    groupedAgents[agentName] = {
-      totalGGR: 0,
+  const agentName =
+    cashier.agents?.name || '';
+
+  // =========================
+  // GROUP AGENTS
+  // =========================
+
+  if (!groupedAgents[agentId]) {
+    groupedAgents[agentId] = {
+      agentId,
+      agentName,
+      totalNetCash: 0,
     };
   }
 
-  // Add totals
-  groupedAgents[agentName].totalGGR += ggr;
+  groupedAgents[
+    agentId
+  ].totalNetCash = round2(
+    groupedAgents[agentId]
+      .totalNetCash + netCash
+  );
+
+  // =========================
+  // GROUP CASHIERS
+  // =========================
+
+  if (!groupedCashiers[cashier.id]) {
+    groupedCashiers[cashier.id] = {
+      cashierId: cashier.id,
+
+      cashierName: cashier.name,
+
+      agentId,
+
+      totalNetCash: 0,
+    };
+  }
+
+  groupedCashiers[
+    cashier.id
+  ].totalNetCash = round2(
+    groupedCashiers[cashier.id]
+      .totalNetCash + netCash
+  );
 }
 
-    const { data: batch } = await supabase
-      .from('upload_batches')
-      .insert({
-        system_type: systemType,
-        uploaded_file_name: file.name,
-        commission_percent: commission,
-        system_payment_percent: systemPayment,
-        settlement_week: week,
-      })
-      .select()
-      .single();
+    // =========================
+    // TOTALS
+    // =========================
 
-    for (const agentName in groupedAgents) {
-      const totalGGR = groupedAgents[agentName].totalGGR;
+    let totalNetCash = 0;
 
-      const netRevenueCollect =
-        totalGGR * (commission / 100);
+    let totalExpectedCollection = 0;
 
-      const totalSystemPayment =
-        netRevenueCollect * (systemPayment / 100);
+    // =========================
+    // CREATE BATCH
+    // =========================
 
-      const remainingBalance = netRevenueCollect;
+    const { data: batch, error: batchError } =
+      await supabase
+        .from('upload_batches')
+        .insert({
+          system_id: systemId,
 
-      let { data: existingAgent } = await supabase
-        .from('agents')
-        .select('*')
-        .eq('name', agentName)
+          system_type: system.name,
+
+          uploaded_file_name: file.name,
+
+          commission_percent: round2(
+            commission
+          ),
+
+          system_payment_percent: round2(
+            system.system_payment_percentage
+          ),
+
+          settlement_week: week,
+        })
+        .select()
         .single();
 
-      if (!existingAgent) {
-        const { data: newAgent } = await supabase
-          .from('agents')
-          .insert({
-            name: agentName,
-          })
-          .select()
-          .single();
+    if (batchError || !batch) {
+      console.log(batchError);
 
-        existingAgent = newAgent;
-      }
+      return NextResponse.json(
+        {
+          error:
+            batchError?.message ||
+            'Failed to create batch',
+        },
+        {
+          status: 500,
+        }
+      );
+    }
 
-      await supabase
+    // =========================
+    // INSERT SETTLEMENTS
+    // =========================
+
+    for (const agentId in groupedAgents) {
+      const agent =
+        groupedAgents[agentId];
+
+      const agentNetCash = round2(
+        agent.totalNetCash
+      );
+
+      const collection = round2(
+        agentNetCash *
+          (commission / 100)
+      );
+
+      const systemPayment = round2(
+        collection *
+          (system.system_payment_percentage /
+            100)
+      );
+
+      totalNetCash = round2(
+        totalNetCash + agentNetCash
+      );
+
+      totalExpectedCollection = round2(
+        totalExpectedCollection +
+          collection
+      );
+
+      const { error } = await supabase
         .from('revenue_settlements')
         .insert({
-          agent_id: existingAgent.id,
+          agent_id: agentId,
+
           batch_id: batch.id,
 
-          system_type: systemType,
+          system_id: systemId,
 
-          total_ggr: totalGGR,
+          system_type: system.name,
+
+          total_net_cash: agentNetCash,
 
           total_net_revenue_collect:
-            netRevenueCollect,
+            collection,
 
           total_system_payment:
-            totalSystemPayment,
+            systemPayment,
+
+          total_paid: 0,
 
           remaining_balance:
-            remainingBalance,
+            collection,
 
           payment_status: 'UNPAID',
 
           settlement_date: week,
         });
+
+      if (error) {
+        console.log(
+          'Settlement insert error',
+          error
+        );
+      }
     }
+
+    // =========================
+// INSERT CASHIER SETTLEMENTS
+// =========================
+
+for (const cashierId in groupedCashiers) {
+  const cashier =
+    groupedCashiers[cashierId];
+
+  const cashierAmount = round2(
+    cashier.totalNetCash
+  );
+
+  const { error } = await supabase
+    .from('cashier_settlements')
+    .insert({
+      cashier_id: cashier.cashierId,
+
+      batch_id: batch.id,
+
+      agent_id: cashier.agentId,
+
+      system_id: systemId,
+
+      system_type: system.name,
+
+      cashier_amount:
+        cashierAmount,
+    });
+
+  if (error) {
+    console.log(
+      'Cashier settlement insert error',
+      error
+    );
+  }
+}
+
+    // =========================
+    // UPDATE BATCH TOTALS
+    // =========================
+
+    await supabase
+      .from('upload_batches')
+      .update({
+        total_rows: rows.length - 1,
+
+        total_agents:
+          Object.keys(groupedAgents).length,
+
+        total_net_cash: round2(
+          totalNetCash
+        ),
+
+        total_expected_collection:
+          round2(
+            totalExpectedCollection
+          ),
+      })
+      .eq('id', batch.id);
+
 
     return NextResponse.json({
       success: true,
-      totalRows: rows.length,
-      totalAgents: Object.keys(groupedAgents).length,
+
+      totalRows: rows.length - 1,
+
+      totalAgents:
+        Object.keys(groupedAgents).length,
+
+      totalNetCash: round2(
+        totalNetCash
+      ),
     });
   } catch (error: any) {
     console.log(error);
 
     return NextResponse.json(
       {
-        error: error.message,
+        error:
+          error.message ||
+          'Upload failed',
       },
       {
         status: 500,

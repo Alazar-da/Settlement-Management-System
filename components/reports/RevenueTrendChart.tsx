@@ -29,6 +29,7 @@ import {
   FiDollarSign,
   FiBarChart2,
 } from 'react-icons/fi';
+import { formatCurrency } from '@/utils/formatCurrency';
 
 ChartJS.register(
   CategoryScale,
@@ -68,7 +69,7 @@ export default function RevenueTrendChart({
 
             remaining: 0,
 
-            ggr: 0,
+            net_cash: 0,
           };
         }
 
@@ -91,8 +92,8 @@ export default function RevenueTrendChart({
           item.remaining_balance || 0
         );
 
-        grouped[week].ggr += Number(
-          item.total_ggr || 0
+        grouped[week].net_cash += Number(
+          item.total_net_cash || 0
         );
       }
     );
@@ -194,11 +195,11 @@ export default function RevenueTrendChart({
       },
 
       {
-        label: 'GGR',
+        label: 'Net Cash',
 
         data: chartData.map(
           (item: any) =>
-            item.ggr
+            item.net_cash
         ),
 
         borderColor:
@@ -235,9 +236,7 @@ export default function RevenueTrendChart({
           callback: function (
             value: any
           ) {
-            return `$${Number(
-              value
-            ).toLocaleString()}`;
+            return `${formatCurrency(Number(value))}`;
           },
         },
       },
@@ -276,12 +275,12 @@ export default function RevenueTrendChart({
       0
     );
 
-  const totalGGR =
+  const totalnet_cash =
     chartData.reduce(
       (
         sum: number,
         item: any
-      ) => sum + item.ggr,
+      ) => sum + item.net_cash,
       0
     );
 
@@ -410,12 +409,12 @@ export default function RevenueTrendChart({
 
           <div>
             <p className="text-xs text-gray-500">
-              GGR
+              net_cash
             </p>
 
             <p className="font-bold text-purple-600">
               $
-              {totalGGR.toLocaleString()}
+              {totalnet_cash.toLocaleString()}
             </p>
           </div>
 
@@ -487,10 +486,10 @@ export default function RevenueTrendChart({
           settlement weeks
         </span>
 
-        <FiDollarSign />
+        {/* <FiDollarSign /> */}
 
         <span>
-          USD Currency
+          ETB Currency
         </span>
       </div>
     </motion.div>

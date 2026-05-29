@@ -1,5 +1,6 @@
 'use client';
 
+import { formatCurrency } from '@/utils/formatCurrency';
 import { motion } from 'framer-motion';
 import {
   FiTrendingUp,
@@ -10,9 +11,9 @@ import {
   FiAlertCircle,
 } from 'react-icons/fi';
 
-export default function KPISection({ settlements }: any) {
-  const totalGGR = settlements.reduce(
-    (sum: number, item: any) => sum + Number(item.total_ggr || 0),
+export default function KPISection({ settlements, agents }: any) {
+  const totalNetCash = settlements.reduce(
+    (sum: number, item: any) => sum + Number(item.total_net_cash || 0),
     0
   );
 
@@ -42,35 +43,40 @@ export default function KPISection({ settlements }: any) {
     !item.payment_status || item.payment_status === 'UNPAID'
   ).length;
 
+  const totalSystemPayment = settlements.reduce(
+    (sum: number, item: any) => sum + Number(item.total_system_payment || 0),
+    0
+  );
+
   const cards = [
     {
-      title: 'Total GGR',
-      value: totalGGR,
+      title: 'Total Net Cash',
+      value: formatCurrency(totalNetCash),
       icon: FiTrendingUp,
       color: 'from-purple-500 to-pink-500',
       bgColor: 'bg-purple-100 dark:bg-purple-900/30',
       textColor: 'text-purple-600 dark:text-purple-400',
-      prefix: '$',
+      prefix: '',
       suffix: '',
     },
     {
       title: 'Expected Collection',
-      value: totalExpected,
+      value: formatCurrency(totalExpected),
       icon: FiDollarSign,
       color: 'from-blue-500 to-cyan-500',
       bgColor: 'bg-blue-100 dark:bg-blue-900/30',
       textColor: 'text-blue-600 dark:text-blue-400',
-      prefix: '$',
+      prefix: '',
       suffix: '',
     },
-    /* {
-      title: 'Collected',
-      value: totalPaid,
+   /*   {
+      title: 'Total System Payment',
+      value: formatCurrency(totalSystemPayment),
       icon: FiCheckCircle,
       color: 'from-green-500 to-emerald-500',
       bgColor: 'bg-green-100 dark:bg-green-900/30',
       textColor: 'text-green-600 dark:text-green-400',
-      prefix: '$',
+      prefix: '',
       suffix: '',
     }, */
     /* {
@@ -95,7 +101,7 @@ export default function KPISection({ settlements }: any) {
     }, */
     {
       title: 'Total Agents',
-      value: settlements.length,
+      value: agents.length,
       icon: FiUsers,
       color: 'from-indigo-500 to-purple-500',
       bgColor: 'bg-indigo-100 dark:bg-indigo-900/30',
@@ -254,13 +260,13 @@ export default function KPISection({ settlements }: any) {
           <div>
             <p className="text-gray-600 dark:text-gray-400">Collected</p>
             <p className="font-semibold text-green-600 dark:text-green-400">
-              ${totalPaid.toLocaleString()}
+              {formatCurrency(totalPaid)}
             </p>
           </div>
           <div className="text-right">
             <p className="text-gray-600 dark:text-gray-400">Remaining</p>
             <p className="font-semibold text-red-600 dark:text-red-400">
-              ${remaining.toLocaleString()}
+              {formatCurrency(remaining)}
             </p>
           </div>
         </div>

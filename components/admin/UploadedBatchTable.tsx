@@ -12,46 +12,61 @@ import {
   FiTrash2,
   FiGrid,
   FiList,
-  FiDownload,
-  FiRefreshCw,
   FiChevronDown,
   FiChevronUp,
+  FiChevronLeft,
+  FiChevronRight,
+  FiChevronsLeft,
+  FiChevronsRight,
 } from 'react-icons/fi';
 import { supabase } from '@/lib/supabase';
 import DeleteBatchModal from './DeleteBatchModal';
 import EditBatchModal from './EditBatchModal';
 import toast from 'react-hot-toast';
+import { memo } from 'react';
+import { assignWeekNumbers } from '@/utils/batchWeeks';
+import { formatCurrency } from '@/utils/formatCurrency';
 
 interface UploadedBatchTableProps {
   onView: (batch: any) => void;
-  onRefresh?: () => void;
+  weekFrom: number | '';
+  weekTo: number | '';
+  systemFilter: string;
+  refreshKey: number;
 }
 
-export default function UploadedBatchTable({ onView, onRefresh }: UploadedBatchTableProps) {
+const ITEMS_PER_PAGE = 10;
+
+function UploadedBatchTable({
+  onView,
+  weekFrom,
+  weekTo,
+  systemFilter,
+  refreshKey,
+}: UploadedBatchTableProps) {
   const [batches, setBatches] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
   const [editBatch, setEditBatch] = useState<any>(null);
   const [deleteBatch, setDeleteBatch] = useState<any>(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [systemFilter, setSystemFilter] = useState<string>('all');
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
 
   useEffect(() => {
     fetchBatches();
-  }, []);
+  }, [systemFilter, weekFrom, weekTo, refreshKey, currentPage]);
 
   async function fetchBatches() {
     setLoading(true);
+
     try {
       let query = supabase
         .from('upload_batches')
         .select('*')
-        .order('created_at', { ascending: false });
-
-      if (searchTerm) {
-        query = query.ilike('uploaded_file_name', `%${searchTerm}%`);
-      }
+        .order('settlement_week', { ascending: true });
 
       if (systemFilter !== 'all') {
         query = query.eq('system_type', systemFilter);
@@ -59,25 +74,88 @@ export default function UploadedBatchTable({ onView, onRefresh }: UploadedBatchT
 
       const { data, error } = await query;
 
-      if (!error) {
-        setBatches(data || []);
-      } else {
+      if (error) {
         toast.error('Failed to fetch batches');
+        return;
       }
+
+      // Create week numbers
+      // =========================
+// CREATE WEEK NUMBERS
+// =========================
+
+const processed = assignWeekNumbers(
+  data || []
+);
+
+// =========================
+// WEEK LOOKUP MAP
+// =========================
+
+const weekMap = new Map();
+
+processed.forEach((item) => {
+  const key = new Date(
+    item.settlement_week
+  )
+    .toISOString()
+    .split('T')[0];
+
+  weekMap.set(
+    key,
+    item.week_number
+  );
+});
+
+      // Filter week range
+      let filtered = processed;
+
+      if (weekFrom !== '') {
+        filtered = filtered.filter((b) => b.week_number >= Number(weekFrom));
+      }
+
+      if (weekTo !== '') {
+        filtered = filtered.filter((b) => b.week_number < Number(weekTo));
+      }
+
+      // Latest first
+      filtered.reverse();
+
+      // Set total count
+      setTotalCount(filtered.length);
+
+      // Paginate
+      const start = (currentPage - 1) * ITEMS_PER_PAGE;
+      const end = start + ITEMS_PER_PAGE;
+      const paginatedBatches = filtered.slice(start, end);
+
+      const finalData =
+  paginatedBatches.map((batch) => {
+    const key = new Date(
+      batch.settlement_week
+    )
+      .toISOString()
+      .split('T')[0];
+
+    return {
+      ...batch,
+      week_number:
+        weekMap.get(key),
+    };
+  });
+
+setBatches(finalData);
+
+      setBatches(paginatedBatches);
     } catch (error) {
-      console.error('Error fetching batches:', error);
+      console.error(error);
       toast.error('Failed to fetch batches');
     } finally {
       setLoading(false);
     }
   }
 
-  const handleRefresh = async () => {
-    await fetchBatches();
-    onRefresh?.();
-    toast.success('Batches refreshed');
-  };
-
+  // Helpers
   const formatDate = (date: string) => {
     return new Date(date).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -87,20 +165,20 @@ export default function UploadedBatchTable({ onView, onRefresh }: UploadedBatchT
   };
 
   const getSystemColor = (system: string) => {
-    return system === 'ALPHA' 
+    return system === 'ALPHA'
       ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
       : 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400';
   };
 
-  const filteredBatches = batches.filter(batch => {
-    if (searchTerm && !batch.uploaded_file_name.toLowerCase().includes(searchTerm.toLowerCase())) {
-      return false;
-    }
-    if (systemFilter !== 'all' && batch.system_type !== systemFilter) {
-      return false;
-    }
-    return true;
-  });
+  // Pagination calculations
+  const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
+  const startItem = totalCount === 0 ? 0 : (currentPage - 1) * ITEMS_PER_PAGE + 1;
+  const endItem = Math.min(currentPage * ITEMS_PER_PAGE, totalCount);
+
+  const goToFirstPage = () => setCurrentPage(1);
+  const goToPreviousPage = () => setCurrentPage(prev => Math.max(1, prev - 1));
+  const goToNextPage = () => setCurrentPage(prev => Math.min(totalPages, prev + 1));
+  const goToLastPage = () => setCurrentPage(totalPages);
 
   // Table View
   const TableView = () => (
@@ -128,6 +206,8 @@ export default function UploadedBatchTable({ onView, onRefresh }: UploadedBatchT
               <FiPercent className="inline w-4 h-4 mr-1" />
               System Payment
             </th>
+            <th className="text-left py-3 px-4 text-sm font-semibold">Net Cash</th>
+            <th className="text-left py-3 px-4 text-sm font-semibold">Expected Collection</th>
             <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600 dark:text-gray-400">
               Actions
             </th>
@@ -135,7 +215,7 @@ export default function UploadedBatchTable({ onView, onRefresh }: UploadedBatchT
         </thead>
         <tbody>
           <AnimatePresence>
-            {filteredBatches.map((batch, index) => (
+            {batches.map((batch, index) => (
               <motion.tr
                 key={batch.id}
                 initial={{ opacity: 0, y: 20 }}
@@ -144,7 +224,10 @@ export default function UploadedBatchTable({ onView, onRefresh }: UploadedBatchT
                 className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
               >
                 <td className="py-3 px-4 text-sm text-gray-900 dark:text-white">
-                  {formatDate(batch.settlement_week)}
+                  <div>
+                    <p className="font-semibold">Week {batch.week_number}</p>
+                    <p className="text-xs text-gray-500">{formatDate(batch.settlement_week)}</p>
+                  </div>
                 </td>
                 <td className="py-3 px-4">
                   <span className={`px-2 py-1 text-xs rounded-full ${getSystemColor(batch.system_type)}`}>
@@ -155,10 +238,16 @@ export default function UploadedBatchTable({ onView, onRefresh }: UploadedBatchT
                   {batch.uploaded_file_name}
                 </td>
                 <td className="py-3 px-4 text-sm font-medium text-gray-900 dark:text-white">
-                  {batch.commission_percent}%
+                  {Number(batch.commission_percent).toFixed(2)}%
                 </td>
                 <td className="py-3 px-4 text-sm font-medium text-gray-900 dark:text-white">
-                  {batch.system_payment_percent}%
+                  {Number(batch.system_payment_percent).toFixed(2)}%
+                </td>
+                <td className="py-3 px-4 text-sm font-medium text-gray-900 dark:text-white">
+                  {formatCurrency(Number(batch.total_net_cash || 0))}
+                </td>
+                <td className="py-3 px-4 text-sm font-medium text-green-600">
+                  {formatCurrency(Number(batch.total_expected_collection || 0))}
                 </td>
                 <td className="py-3 px-4">
                   <div className="flex gap-2">
@@ -189,15 +278,15 @@ export default function UploadedBatchTable({ onView, onRefresh }: UploadedBatchT
             ))}
           </AnimatePresence>
         </tbody>
-      </table>
+       </table>
     </div>
   );
 
-  // Card View (Mobile)
+  // Card View
   const CardView = () => (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
       <AnimatePresence>
-        {filteredBatches.map((batch, index) => (
+        {batches.map((batch, index) => (
           <motion.div
             key={batch.id}
             initial={{ opacity: 0, scale: 0.9 }}
@@ -212,9 +301,7 @@ export default function UploadedBatchTable({ onView, onRefresh }: UploadedBatchT
                   <div className={`px-2 py-1 text-xs rounded-full ${getSystemColor(batch.system_type)}`}>
                     {batch.system_type}
                   </div>
-                  <span className="text-xs text-gray-500 dark:text-gray-400">
-                    ID: {batch.id.slice(-8)}
-                  </span>
+                  <span className="text-xs text-gray-500 dark:text-gray-400">ID: {batch.id.slice(-8)}</span>
                 </div>
                 <button
                   onClick={() => setExpandedCard(expandedCard === batch.id ? null : batch.id)}
@@ -228,31 +315,26 @@ export default function UploadedBatchTable({ onView, onRefresh }: UploadedBatchT
                 </button>
               </div>
 
-              {/* Basic Info */}
+              {/* Info */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
                     <FiCalendar className="w-4 h-4" />
                     <span>Settlement Week</span>
                   </div>
-                  <span className="text-sm font-medium text-gray-900 dark:text-white">
-                    {formatDate(batch.settlement_week)}
-                  </span>
+                  <div>
+                    <p className="font-semibold text-sm">Week {batch.week_number}</p>
+                    <p className="text-xs text-gray-500">{formatDate(batch.settlement_week)}</p>
+                  </div>
                 </div>
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
-                    <FiPercent className="w-4 h-4" />
-                    <span>Commission</span>
-                  </div>
+                  <span className="text-sm text-gray-600 dark:text-gray-400">Commission</span>
                   <span className="text-sm font-semibold text-primary-600 dark:text-primary-400">
                     {batch.commission_percent}%
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
-                    <FiPercent className="w-4 h-4" />
-                    <span>System Payment</span>
-                  </div>
+                  <span className="text-sm text-gray-600 dark:text-gray-400">System Payment</span>
                   <span className="text-sm font-semibold text-secondary-600 dark:text-secondary-400">
                     {batch.system_payment_percent}%
                   </span>
@@ -270,15 +352,25 @@ export default function UploadedBatchTable({ onView, onRefresh }: UploadedBatchT
                   >
                     <div>
                       <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">File Name</p>
-                      <p className="text-sm text-gray-900 dark:text-white break-all">
-                        {batch.uploaded_file_name}
-                      </p>
+                      <p className="text-sm text-gray-900 dark:text-white break-all">{batch.uploaded_file_name}</p>
                     </div>
                     <div>
                       <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Uploaded At</p>
                       <p className="text-sm text-gray-900 dark:text-white">
                         {new Date(batch.created_at).toLocaleString()}
                       </p>
+                    </div>
+                    <div className="space-y-1 pt-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-500">Net Cash</span>
+                        <span className="font-semibold">{formatCurrency(Number(batch.total_net_cash || 0))}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-500">Expected Collection</span>
+                        <span className="font-semibold text-green-600">
+                          {formatCurrency(Number(batch.total_expected_collection || 0))}
+                        </span>
+                      </div>
                     </div>
                   </motion.div>
                 )}
@@ -321,76 +413,40 @@ export default function UploadedBatchTable({ onView, onRefresh }: UploadedBatchT
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-              Uploaded Settlement Batches
-            </h2>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Uploaded Settlement Batches</h2>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              {filteredBatches.length} batch{filteredBatches.length !== 1 ? 'es' : ''} uploaded
+              {totalCount} batch{totalCount !== 1 ? 'es' : ''} uploaded
             </p>
           </div>
 
-          <div className="flex items-center space-x-3">
-            {/* Search */}
-            {/* <div className="relative">
-              <input
-                type="text"
-                placeholder="Search batches..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              />
-              <FiFile className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-            </div> */}
-
-            {/* System Filter */}
-            <select
-              value={systemFilter}
-              onChange={(e) => setSystemFilter(e.target.value)}
-              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-            >
-              <option value="all">All Systems</option>
-              <option value="ALPHA">Alpha</option>
-              <option value="KIRON2">Kiron 2</option>
-            </select>
-
-            {/* View Toggle */}
-            <div className="flex rounded-lg bg-gray-100 dark:bg-gray-700 p-1">
-              <button
-                onClick={() => setViewMode('table')}
-                className={`p-2 rounded-md transition-all duration-200 ${
-                  viewMode === 'table'
-                    ? 'bg-white dark:bg-gray-600 text-primary-600 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'
-                }`}
-                title="Table View"
-              >
-                <FiList className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setViewMode('card')}
-                className={`p-2 rounded-md transition-all duration-200 ${
-                  viewMode === 'card'
-                    ? 'bg-white dark:bg-gray-600 text-primary-600 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'
-                }`}
-                title="Card View"
-              >
-                <FiGrid className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Refresh Button */}
+          {/* View Toggle */}
+          <div className="flex rounded-lg bg-gray-100 dark:bg-gray-700 p-1">
             <button
-              onClick={handleRefresh}
-              className="p-2 rounded-lg bg-primary-500/10 text-primary-600 hover:bg-primary-500 hover:text-white transition-all duration-200"
-              title="Refresh"
+              onClick={() => setViewMode('table')}
+              className={`p-2 rounded-md transition-all duration-200 ${
+                viewMode === 'table'
+                  ? 'bg-white dark:bg-gray-600 text-primary-600 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'
+              }`}
+              title="Table View"
             >
-              <FiRefreshCw className="w-4 h-4" />
+              <FiList className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setViewMode('card')}
+              className={`p-2 rounded-md transition-all duration-200 ${
+                viewMode === 'card'
+                  ? 'bg-white dark:bg-gray-600 text-primary-600 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'
+              }`}
+              title="Card View"
+            >
+              <FiGrid className="w-4 h-4" />
             </button>
           </div>
         </div>
 
-        {/* Loading State */}
+        {/* Loading */}
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <div className="text-center">
@@ -398,28 +454,95 @@ export default function UploadedBatchTable({ onView, onRefresh }: UploadedBatchT
               <p className="mt-4 text-gray-600 dark:text-gray-400">Loading batches...</p>
             </div>
           </div>
-        ) : filteredBatches.length === 0 ? (
-          /* Empty State */
+        ) : batches.length === 0 ? (
+          /* Empty */
           <div className="text-center py-12">
             <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gray-100 dark:bg-gray-700 mb-4">
               <FiFile className="w-10 h-10 text-gray-400" />
             </div>
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-              No batches found
-            </h3>
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No batches found</h3>
             <p className="text-gray-600 dark:text-gray-400">
-              {searchTerm || systemFilter !== 'all' 
-                ? 'Try adjusting your search or filter criteria'
-                : 'Upload your first settlement batch to get started'}
+              Try adjusting your filters or upload a new settlement batch.
             </p>
           </div>
         ) : (
-          /* View Content */
-          viewMode === 'table' ? <TableView /> : <CardView />
+          <>
+            {viewMode === 'table' ? <TableView /> : <CardView />}
+            
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <div className="text-sm text-gray-600 dark:text-gray-400 text-center sm:text-left">
+                  Showing {startItem} to {endItem} of {totalCount} batches
+                </div>
+                <div className="flex items-center justify-center space-x-2">
+                  <button
+                    onClick={goToFirstPage}
+                    disabled={currentPage === 1}
+                    className="p-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    title="First page"
+                  >
+                    <FiChevronsLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={goToPreviousPage}
+                    disabled={currentPage === 1}
+                    className="p-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    title="Previous page"
+                  >
+                    <FiChevronLeft className="w-4 h-4" />
+                  </button>
+                  <div className="flex items-center space-x-1">
+                    {(() => {
+                      const maxVisible = 5;
+                      let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+                      let endPage = Math.min(totalPages, startPage + maxVisible - 1);
+                      if (endPage - startPage + 1 < maxVisible) {
+                        startPage = Math.max(1, endPage - maxVisible + 1);
+                      }
+                      const pages = [];
+                      for (let i = startPage; i <= endPage; i++) {
+                        pages.push(i);
+                      }
+                      return pages.map((page) => (
+                        <button
+                          key={page}
+                          onClick={() => setCurrentPage(page)}
+                          className={`w-8 h-8 rounded-lg text-sm font-medium transition-colors ${
+                            currentPage === page
+                              ? 'bg-black dark:bg-primary-600 text-white'
+                              : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                          }`}
+                        >
+                          {page}
+                        </button>
+                      ));
+                    })()}
+                  </div>
+                  <button
+                    onClick={goToNextPage}
+                    disabled={currentPage === totalPages}
+                    className="p-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    title="Next page"
+                  >
+                    <FiChevronRight className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={goToLastPage}
+                    disabled={currentPage === totalPages}
+                    className="p-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    title="Last page"
+                  >
+                    <FiChevronsRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 
-      {/* Modals */}
+      {/* Edit Modal */}
       {editBatch && (
         <EditBatchModal
           batch={editBatch}
@@ -431,6 +554,7 @@ export default function UploadedBatchTable({ onView, onRefresh }: UploadedBatchT
         />
       )}
 
+      {/* Delete Modal */}
       {deleteBatch && (
         <DeleteBatchModal
           batch={deleteBatch}
@@ -444,3 +568,5 @@ export default function UploadedBatchTable({ onView, onRefresh }: UploadedBatchT
     </>
   );
 }
+
+export default memo(UploadedBatchTable);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -24,12 +24,25 @@ interface UploadSettlementModalProps {
 
 export default function UploadSettlementModal({ isOpen, onClose, onSuccess }: UploadSettlementModalProps) {
   const [file, setFile] = useState<File | null>(null);
-  const [systemType, setSystemType] = useState('KIRON2');
   const [commission, setCommission] = useState(10);
-  const [systemPayment, setSystemPayment] = useState(30);
+  const [systems, setSystems] = useState<any[]>([]);
+const [systemId, setSystemId] = useState('');
+const [selectedSystem, setSelectedSystem] = useState<any>(null);
   const [week, setWeek] = useState('');
   const [loading, setLoading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+
+  useEffect(() => {
+  fetchSystems();
+}, []);
+
+async function fetchSystems() {
+  const response = await fetch('/api/systems');
+
+  const data = await response.json();
+
+  setSystems(data || []);
+}
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     if (acceptedFiles.length > 0) {
@@ -75,9 +88,8 @@ export default function UploadSettlementModal({ isOpen, onClose, onSuccess }: Up
     try {
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('systemType', systemType);
       formData.append('commission', String(commission));
-      formData.append('systemPayment', String(systemPayment));
+      formData.append('systemId', systemId);
       formData.append('week', week);
 
       const response = await fetch('/api/upload-settlement', {
@@ -96,8 +108,7 @@ export default function UploadSettlementModal({ isOpen, onClose, onSuccess }: Up
         // Reset form
         setFile(null);
         setWeek('');
-        setCommission(10);
-        setSystemPayment(30);
+        setCommission(0);
       }
     } catch (error) {
       toast.error('Upload failed. Please try again.');
@@ -140,7 +151,7 @@ export default function UploadSettlementModal({ isOpen, onClose, onSuccess }: Up
                     Upload Settlement
                   </h2>
                   <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                    Upload weekly settlement files for Kiron 2 or Alpha systems
+                    Upload weekly settlement files for selected systems
                   </p>
                 </div>
                 <button
@@ -154,46 +165,39 @@ export default function UploadSettlementModal({ isOpen, onClose, onSuccess }: Up
               {/* Content */}
               <div className="p-6 space-y-6">
                 {/* System Selection */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    <FiCpu className="inline w-4 h-4 mr-1" />
-                    System Type
-                  </label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setSystemType('KIRON2')}
-                      className={`p-3 rounded-xl border-2 transition-all ${
-                        systemType === 'KIRON2'
-                          ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
-                          : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
-                      }`}
-                    >
-                      <div className="text-center">
-                        <div className="text-2xl mb-1">🎯</div>
-                        <div className="font-semibold text-gray-900 dark:text-white">Kiron 2</div>
-                        <div className="text-xs text-gray-500">Virtual Sports</div>
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSystemType('ALPHA')}
-                      className={`p-3 rounded-xl border-2 transition-all ${
-                        systemType === 'ALPHA'
-                          ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
-                          : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
-                      }`}
-                    >
-                      <div className="text-center">
-                        <div className="text-2xl mb-1">🎰</div>
-                        <div className="font-semibold text-gray-900 dark:text-white">Alpha</div>
-                        <div className="text-xs text-gray-500">Casino System</div>
-                      </div>
-                    </button>
-                  </div>
-                </div>
+             <div>
+  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+    <FiCpu className="inline w-4 h-4 mr-1" />
+    System
+  </label>
 
-                {/* Settlement Week */}
+  <select
+    value={systemId}
+    onChange={(e) => {
+      const selected = systems.find(
+        (s) => s.id === e.target.value
+      );
+
+      setSystemId(e.target.value);
+      setSelectedSystem(selected);
+    }}
+    className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+  >
+    <option value="">Select system</option>
+
+    {systems.map((system) => (
+      <option key={system.id} value={system.id}>
+        {system.name}
+      </option>
+    ))}
+  </select>
+</div>
+
+             
+
+                {/* Commission Settings */}
+                <div className="grid grid-cols-2 gap-4">
+                     {/* Settlement Week */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     <FiCalendar className="inline w-4 h-4 mr-1" />
@@ -206,9 +210,6 @@ export default function UploadSettlementModal({ isOpen, onClose, onSuccess }: Up
                     className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
                   />
                 </div>
-
-                {/* Commission Settings */}
-                <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       <FiPercent className="inline w-4 h-4 mr-1" />
@@ -218,21 +219,6 @@ export default function UploadSettlementModal({ isOpen, onClose, onSuccess }: Up
                       type="number"
                       value={commission}
                       onChange={(e) => setCommission(Number(e.target.value))}
-                      min="0"
-                      max="100"
-                      step="0.01"
-                      className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      <FiPercent className="inline w-4 h-4 mr-1" />
-                      System Payment (%)
-                    </label>
-                    <input
-                      type="number"
-                      value={systemPayment}
-                      onChange={(e) => setSystemPayment(Number(e.target.value))}
                       min="0"
                       max="100"
                       step="0.01"
@@ -315,8 +301,8 @@ export default function UploadSettlementModal({ isOpen, onClose, onSuccess }: Up
                         Important Information
                       </p>
                       <ul className="text-xs text-blue-700 dark:text-blue-400 mt-1 space-y-1">
-                        <li>• File will be parsed and grouped by agent/shop</li>
-                        <li>• New agents will be created automatically</li>
+                        <li>• File will be parsed and grouped by agents</li>
+                        <li>• Cashiers net chash will be stored</li>
                         <li>• Calculations will be based on commission percentages</li>
                         <li>• Duplicate uploads for same week are prevented</li>
                       </ul>
@@ -325,14 +311,14 @@ export default function UploadSettlementModal({ isOpen, onClose, onSuccess }: Up
                 </div>
 
                 {/* Preview Calculation */}
-                {commission > 0 && systemPayment > 0 && (
+               {commission > 0 && selectedSystem && (
                   <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
                     <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">
                       Calculation Preview
                     </h4>
                     <div className="space-y-1 text-sm">
                       <div className="flex justify-between">
-                        <span className="text-gray-600 dark:text-gray-400">For $100,000 GGR:</span>
+                        <span className="text-gray-600 dark:text-gray-400">For $100,000 Net Cash:</span>
                         <span className="font-medium text-gray-900 dark:text-white">
                           ${(100000 * commission / 100).toLocaleString()} Collection
                         </span>
@@ -340,13 +326,13 @@ export default function UploadSettlementModal({ isOpen, onClose, onSuccess }: Up
                       <div className="flex justify-between">
                         <span className="text-gray-600 dark:text-gray-400">System Payment:</span>
                         <span className="font-medium text-gray-900 dark:text-white">
-                          ${(100000 * commission / 100 * systemPayment / 100).toLocaleString()}
+                          ${(100000 * commission / 100 * selectedSystem.system_payment_percentage / 100).toLocaleString()}
                         </span>
                       </div>
                       <div className="flex justify-between pt-2 border-t border-gray-200 dark:border-gray-600">
                         <span className="text-gray-600 dark:text-gray-400">Company Profit:</span>
                         <span className="font-semibold text-green-600 dark:text-green-400">
-                          ${(100000 * commission / 100 * (100 - systemPayment) / 100).toLocaleString()}
+                          ${(100000 * commission / 100 * (100 - selectedSystem.system_payment_percentage) / 100).toLocaleString()}
                         </span>
                       </div>
                     </div>
