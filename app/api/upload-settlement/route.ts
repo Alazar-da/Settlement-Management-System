@@ -106,14 +106,14 @@ const groupedCashiers: any = {};
 for (let i = 1; i < rows.length; i++) {
   const row = rows[i];
 
-  // COLUMN B = CASHIER
+  // COLUMN A = CASHIER
   const cashierName = String(
-    row[1] || ''
+    row[0] || ''
   ).trim();
 
-  // COLUMN C = NET CASH
+  // COLUMN B = NET CASH
   const netCash = round2(
-    Number(row[2] || 0)
+    Number(row[1] || 0)
   );
 
   if (!cashierName) continue;
