@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 import {
   FiDownload,
   FiSearch,
@@ -10,6 +10,7 @@ import {
   FiChevronRight,
   FiChevronsLeft,
   FiChevronsRight,
+  FiPrinter,
 } from 'react-icons/fi';
 import { supabase } from '@/lib/supabase';
 import { assignWeekNumbers } from '@/utils/batchWeeks';
@@ -58,35 +59,31 @@ export default function CashierSettlementReport() {
   }, []);
 
   useEffect(() => {
-    // Reset to page 1 when filters change
     setCurrentPage(1);
   }, [selectedWeek, selectedAgent, selectedSystem, search]);
 
   async function fetchData() {
     try {
       setLoading(true);
- const {
-  data: settlements,
-  error,
-} = await supabase
-  .from('cashier_settlements')
-  .select(
-    `
-    *,
-    cashier:cashier_id (
-      id,
-      name
-    ),
-    agent:agent_id (
-      id,
-      name
-    ),
-    batch:batch_id (
-      id,
-      settlement_week
-    )
-  `
-  );
+      const { data: settlements, error } = await supabase
+        .from('cashier_settlements')
+        .select(
+          `
+          *,
+          cashier:cashier_id (
+            id,
+            name
+          ),
+          agent:agent_id (
+            id,
+            name
+          ),
+          batch:batch_id (
+            id,
+            settlement_week
+          )
+        `
+        );
 
       if (error) {
         toast.error('Failed to load report');
@@ -100,24 +97,11 @@ export default function CashierSettlementReport() {
 
       const processed = assignWeekNumbers(normalizedData);
 
-      const sorted =
-  (processed || []).sort(
-    (a, b) => {
-      const dateA = new Date(
-        a.batch
-          ?.settlement_week ||
-          a.settlement_date
-      ).getTime();
-
-      const dateB = new Date(
-        b.batch
-          ?.settlement_week ||
-          b.settlement_date
-      ).getTime();
-
-      return dateB - dateA;
-    }
-  );
+      const sorted = (processed || []).sort((a, b) => {
+        const dateA = new Date(a.batch?.settlement_week || a.settlement_date).getTime();
+        const dateB = new Date(b.batch?.settlement_week || b.settlement_date).getTime();
+        return dateB - dateA;
+      });
 
       setData(sorted);
 
@@ -142,7 +126,6 @@ export default function CashierSettlementReport() {
     }
   }
 
-  // Filtered data
   const filteredData = useMemo(() => {
     let filtered = [...data];
 
@@ -167,14 +150,12 @@ export default function CashierSettlementReport() {
     return filtered;
   }, [data, selectedWeek, selectedAgent, selectedSystem, search]);
 
-  // Pagination calculations
   const totalCount = filteredData.length;
   const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
   const startItem = totalCount === 0 ? 0 : (currentPage - 1) * ITEMS_PER_PAGE + 1;
   const endItem = Math.min(currentPage * ITEMS_PER_PAGE, totalCount);
   const paginatedData = filteredData.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
-  // Grand total (for filtered data)
   const grandTotal = filteredData.reduce((sum, item) => sum + Number(item.cashier_amount || 0), 0);
 
   const goToFirstPage = () => setCurrentPage(1);
@@ -182,8 +163,182 @@ export default function CashierSettlementReport() {
   const goToNextPage = () => setCurrentPage(prev => Math.min(totalPages, prev + 1));
   const goToLastPage = () => setCurrentPage(totalPages);
 
-  // Export Excel
-  const exportExcel = () => {
+  // Group data by owner
+  const getOwnerTotals = () => {
+    const ownerMap = new Map();
+    filteredData.forEach((item) => {
+      const ownerName = item.agent?.name || 'Unknown';
+      ownerMap.set(ownerName, (ownerMap.get(ownerName) || 0) + Number(item.cashier_amount || 0));
+    });
+    return Array.from(ownerMap.entries()).map(([name, total]) => ({ name, total }));
+  };
+
+  // Group data by system
+  const getSystemTotals = () => {
+    const systemMap = new Map();
+    filteredData.forEach((item) => {
+      const systemName = item.system_type || 'Unknown';
+      systemMap.set(systemName, (systemMap.get(systemName) || 0) + Number(item.cashier_amount || 0));
+    });
+    return Array.from(systemMap.entries()).map(([name, total]) => ({ name, total }));
+  };
+
+  // Group cashiers with their amounts
+  const getCashierDetails = () => {
+    const cashierMap = new Map();
+    filteredData.forEach((item) => {
+      const cashierName = item.cashier?.name || 'Unknown';
+      cashierMap.set(cashierName, (cashierMap.get(cashierName) || 0) + Number(item.cashier_amount || 0));
+    });
+    return Array.from(cashierMap.entries()).map(([name, total]) => ({ name, total }));
+  };
+
+  // Export Excel with new format
+// Export Formatted Excel with hierarchy
+const exportFormattedExcel = () => {
+  try {
+    const exportData: any[] = [];
+
+    // Title
+    exportData.push({ A: 'CASHIER SETTLEMENT REPORT', B: '' });
+    exportData.push({ A: `Generated: ${new Date().toLocaleString()}`, B: '' });
+    exportData.push({ A: '', B: '' });
+
+    // Group data by agent
+    const agentGroups = new Map();
+    filteredData.forEach((item) => {
+      const agentName = item.agent?.name || 'Unknown Agent';
+      if (!agentGroups.has(agentName)) {
+        agentGroups.set(agentName, []);
+      }
+      agentGroups.get(agentName).push({
+        system: item.system_type,
+        cashier: item.cashier?.name,
+        amount: Number(item.cashier_amount || 0),
+      });
+    });
+
+    // For each agent, show their sections
+    let grandTotalCalc = 0;
+    const agentEntries = Array.from(agentGroups.entries());
+
+    agentEntries.forEach(([agentName, items], agentIndex) => {
+      // Calculate agent total
+      const agentTotal = items.reduce((sum: number, item: any) => sum + item.amount, 0);
+      grandTotalCalc += agentTotal;
+
+      // Owner row
+      exportData.push({ A: agentName, B: agentTotal });
+      
+      // Group by system within this agent
+      const systemGroups = new Map();
+      items.forEach((item: any) => {
+        const systemName = item.system || 'Unknown';
+        if (!systemGroups.has(systemName)) {
+          systemGroups.set(systemName, { total: 0, cashiers: [] });
+        }
+        systemGroups.get(systemName).total += item.amount;
+        systemGroups.get(systemName).cashiers.push({
+          name: item.cashier,
+          amount: item.amount,
+        });
+      });
+
+      // System rows (indented)
+      const systemEntries = Array.from(systemGroups.entries());
+      systemEntries.forEach(([systemName, systemData]: [string, any]) => {
+        exportData.push({ A: `  ${systemName}`, B: systemData.total });
+        
+        // Cashier rows (further indented)
+        systemData.cashiers.forEach((cashier: any) => {
+          exportData.push({ A: `    ${cashier.name}`, B: cashier.amount });
+        });
+      });
+
+      // Agent Grand Total row
+      exportData.push({ A: `${agentName} TOTAL`, B: agentTotal });
+
+      // Add empty row between agents (except after last agent)
+      if (agentIndex < agentEntries.length - 1) {
+        exportData.push({ A: '', B: '' });
+      }
+    });
+
+    // Add empty row before grand total
+    exportData.push({ A: '', B: '' });
+    exportData.push({ A: 'GRAND TOTAL', B: grandTotalCalc });
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData, { skipHeader: true });
+    
+    // Set column widths
+    worksheet['!cols'] = [{ wch: 35 }, { wch: 15 }];
+    
+    // Apply styling to all rows in first column (light blue background)
+    const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1:B1');
+    for (let row = range.s.r; row <= range.e.r; row++) {
+      const cellAddress = XLSX.utils.encode_cell({ r: row, c: 0 });
+      if (!worksheet[cellAddress]) continue;
+      
+      // Add style to first column cells
+for (let row = range.s.r; row <= range.e.r; row++) {
+  for (let col = 0; col <= 1; col++) {
+    const cellAddress = XLSX.utils.encode_cell({
+      r: row,
+      c: col,
+    });
+
+    if (!worksheet[cellAddress]) continue;
+
+    worksheet[cellAddress].s = {
+      fill: {
+        patternType: 'solid',
+        fgColor: {
+          rgb: col === 0 ? 'D6E6F5' : 'FFFFFF',
+        },
+      },
+      border: {
+        top: {
+          style: 'thin',
+          color: { rgb: 'CCCCCC' },
+        },
+        bottom: {
+          style: 'thin',
+          color: { rgb: 'CCCCCC' },
+        },
+        left: {
+          style: 'thin',
+          color: { rgb: 'CCCCCC' },
+        },
+        right: {
+          style: 'thin',
+          color: { rgb: 'CCCCCC' },
+        },
+      },
+    };
+  }
+}
+    }
+
+    // Format numbers in second column (no currency symbol, just numbers)
+    for (let row = range.s.r; row <= range.e.r; row++) {
+      const cellAddress = XLSX.utils.encode_cell({ r: row, c: 1 });
+      if (worksheet[cellAddress] && typeof worksheet[cellAddress].v === 'number') {
+        worksheet[cellAddress].z = '0'; // Number format without decimals
+      }
+    }
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Cashier Report');
+    XLSX.writeFile(workbook, `cashier-report-${new Date().toISOString()}.xlsx`);
+    toast.success('Formatted Excel exported');
+  } catch (error) {
+    console.log(error);
+    toast.error('Failed to export excel');
+  }
+};
+
+  // Export standard Excel (original format)
+  const exportStandardExcel = () => {
     try {
       const exportData = filteredData.map((item, index) => ({
         No: (index + 1).toString(),
@@ -208,8 +363,8 @@ export default function CashierSettlementReport() {
       const worksheet = XLSX.utils.json_to_sheet(exportData);
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Cashier Report');
-      XLSX.writeFile(workbook, `cashier-report-${new Date().toISOString()}.xlsx`);
-      toast.success('Excel exported');
+      XLSX.writeFile(workbook, `cashier-report-standard-${new Date().toISOString()}.xlsx`);
+      toast.success('Standard Excel exported');
     } catch (error) {
       console.log(error);
       toast.error('Failed to export excel');
@@ -230,13 +385,22 @@ export default function CashierSettlementReport() {
             </p>
           </div>
 
-          <button
-            onClick={exportExcel}
-            className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
-          >
-            <FiDownload className="w-4 h-4" />
-            <span>Export Excel</span>
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={exportStandardExcel}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+            >
+              <FiDownload className="w-4 h-4" />
+              <span>Export Standard</span>
+            </button>
+            <button
+              onClick={exportFormattedExcel}
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
+            >
+              <FiPrinter className="w-4 h-4" />
+              <span>Export Formatted</span>
+            </button>
+          </div>
         </div>
 
         {/* FILTERS */}

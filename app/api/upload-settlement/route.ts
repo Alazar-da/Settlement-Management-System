@@ -260,7 +260,7 @@ for (let i = 1; i < rows.length; i++) {
       );
 
       const systemPayment = round2(
-        collection *
+        agentNetCash *
           (system.system_payment_percentage /
             100)
       );

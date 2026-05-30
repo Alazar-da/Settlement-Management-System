@@ -18,6 +18,9 @@ import {
   FiChevronRight,
   FiChevronsLeft,
   FiChevronsRight,
+  FiEdit2,
+  FiTrash2,
+  FiAlertTriangle,
 } from 'react-icons/fi';
 
 import { supabase } from '@/lib/supabase';
@@ -42,6 +45,15 @@ export default function AgentSettlementTable({
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
   const [batchInfo, setBatchInfo] = useState<any>(null);
+  const [editingSettlement, setEditingSettlement] = useState<any>(null);
+  const [commissionPercent, setCommissionPercent] = useState('');
+  const [updatingCommission, setUpdatingCommission] = useState(false);
+  
+  // Modal states
+  const [showSystemPaymentModal, setShowSystemPaymentModal] = useState(false);
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [selectedItemForReset, setSelectedItemForReset] = useState<any>(null);
+  const [systemPaymentAmount, setSystemPaymentAmount] = useState(0);
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -53,7 +65,6 @@ export default function AgentSettlementTable({
   }, [batchId]);
 
   useEffect(() => {
-    // Reset to page 1 when search/filter changes
     setCurrentPage(1);
   }, [searchTerm, filterStatus]);
 
@@ -102,19 +113,15 @@ export default function AgentSettlementTable({
   }
 
   async function handleSystemPayment() {
-    if (batchInfo?.system_payment_status === 'PAID') {
-      toast.success('System payment already completed');
-      return;
-    }
-
     const totalSystemPayment = filteredData.reduce(
       (sum, item) => sum + Number(item.total_system_payment || 0),
       0
     );
+    setSystemPaymentAmount(totalSystemPayment);
+    setShowSystemPaymentModal(true);
+  }
 
-    const confirmed = window.confirm(`Mark ${formatCurrency(totalSystemPayment)} as fully paid?`);
-    if (!confirmed) return;
-
+  async function confirmSystemPayment() {
     const { error } = await supabase
       .from('upload_batches')
       .update({
@@ -129,7 +136,91 @@ export default function AgentSettlementTable({
     }
 
     toast.success('System payment completed');
+    setShowSystemPaymentModal(false);
     fetchBatchInfo();
+  }
+
+  async function handleResetPayment(item: any) {
+    setSelectedItemForReset(item);
+    setShowResetModal(true);
+  }
+
+  async function confirmResetPayment() {
+    if (!selectedItemForReset) return;
+
+    try {
+      const totalDue = Number(selectedItemForReset.total_net_revenue_collect || 0);
+
+      const { error } = await supabase
+        .from('revenue_settlements')
+        .update({
+          total_paid: 0,
+          remaining_balance: totalDue,
+          payment_status: 'UNPAID',
+        })
+        .eq('id', selectedItemForReset.id);
+
+      if (error) {
+        toast.error('Failed to reset payment');
+        return;
+      }
+
+      toast.success('Payment reset successfully');
+      setShowResetModal(false);
+      setSelectedItemForReset(null);
+      fetchData();
+    } catch (error) {
+      console.log(error);
+      toast.error('Failed to reset payment');
+    }
+  }
+
+  async function handleUpdateCommission() {
+    if (!editingSettlement) return;
+
+    try {
+      setUpdatingCommission(true);
+      const percent = Number(commissionPercent);
+
+      if (isNaN(percent) || percent <= 0) {
+        toast.error('Invalid commission percentage');
+        return;
+      }
+
+      const totalNetCash = Number(editingSettlement.total_net_cash || 0);
+      const totalRevenueCollect = (percent / 100) * totalNetCash;
+      const remainingBalance = totalRevenueCollect - Number(editingSettlement.total_paid || 0);
+
+      let paymentStatus = 'UNPAID';
+      if (Number(editingSettlement.total_paid || 0) >= totalRevenueCollect) {
+        paymentStatus = 'PAID';
+      } else if (Number(editingSettlement.total_paid || 0) > 0) {
+        paymentStatus = 'PARTIALLY_PAID';
+      }
+
+      const { error } = await supabase
+        .from('revenue_settlements')
+        .update({
+          total_net_revenue_collect: totalRevenueCollect,
+          remaining_balance: remainingBalance,
+          payment_status: paymentStatus,
+        })
+        .eq('id', editingSettlement.id);
+
+      if (error) {
+        toast.error('Failed to update commission');
+        return;
+      }
+
+      toast.success('Commission updated');
+      setEditingSettlement(null);
+      fetchData();
+    } catch (error) {
+      console.log(error);
+      toast.error('Failed to update commission');
+    } finally {
+      setUpdatingCommission(false);
+    }
   }
 
   const getStatusConfig = (status: string) => {
@@ -173,12 +264,10 @@ export default function AgentSettlementTable({
     return matchesSearch && matchesStatus;
   });
 
-  // Update total count when filtered data changes
   useEffect(() => {
     setTotalCount(filteredData.length);
   }, [filteredData.length]);
 
-  // Pagination
   const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
   const startItem = totalCount === 0 ? 0 : (currentPage - 1) * ITEMS_PER_PAGE + 1;
   const endItem = Math.min(currentPage * ITEMS_PER_PAGE, totalCount);
@@ -196,7 +285,7 @@ export default function AgentSettlementTable({
   const goToNextPage = () => setCurrentPage(prev => Math.min(totalPages, prev + 1));
   const goToLastPage = () => setCurrentPage(totalPages);
 
-  // Table View
+  // Table View (same as before, just update the reset button)
   const TableView = () => (
     <div className="overflow-x-auto">
       <table className="w-full">
@@ -205,11 +294,11 @@ export default function AgentSettlementTable({
             <th className="text-left py-3 px-3 text-sm font-semibold">Agent</th>
             <th className="text-left py-3 px-3 text-sm font-semibold">System</th>
             <th className="text-right py-3 px-3 text-sm font-semibold">Net Cash</th>
-            <th className="text-right py-3 px-3 text-sm font-semibold">Due</th>
+            <th className="text-right py-3 px-3 text-sm font-semibold">Total</th>
             <th className="text-right py-3 px-3 text-sm font-semibold">Paid</th>
             <th className="text-right py-3 px-3 text-sm font-semibold">Remaining</th>
             <th className="text-left py-3 px-3 text-sm font-semibold">Status</th>
-            <th className="text-center py-3 px-3 text-sm font-semibold">Action</th>
+            <th className="text-center py-3 px-3 text-sm font-semibold">Actions</th>
            </tr>
         </thead>
         <tbody>
@@ -232,7 +321,7 @@ export default function AgentSettlementTable({
                     </div>
                   </td>
                   <td className="py-3 px-3">
-                    <span className="p-1 text-xs rounded-full bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400">
+                    <span className="px-2 py-1 text-xs rounded-full bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400">
                       {item.system_type}
                     </span>
                   </td>
@@ -254,18 +343,46 @@ export default function AgentSettlementTable({
                       <span className={`text-sm ${statusConfig.textColor}`}>{statusConfig.label}</span>
                     </div>
                   </td>
-                  <td className="py-3 px-3 text-center">
-                    <button
-                      disabled={item.payment_status === 'FULLY_PAID' || item.payment_status === 'PAID'}
-                      onClick={() => setSelectedPaymentBatch(item)}
-                      className={`px-3 py-1.5 rounded-lg bg-green-600 text-white text-sm hover:bg-green-700 transition-colors ${
-                        item.payment_status === 'FULLY_PAID' || item.payment_status === 'PAID'
-                          ? 'opacity-50 cursor-not-allowed'
-                          : ''
-                      }`}
-                    >
-                      Payment
-                    </button>
+                  <td className="py-3 px-3">
+                    <div className="flex items-center justify-center gap-1">
+                      <button
+                        disabled={item.payment_status === 'FULLY_PAID' || item.payment_status === 'PAID'}
+                        onClick={() => setSelectedPaymentBatch(item)}
+                        className={`p-1.5 rounded-lg bg-green-600 text-white text-xs hover:bg-green-700 transition-colors ${
+                          item.payment_status === 'FULLY_PAID' || item.payment_status === 'PAID'
+                            ? 'opacity-50 cursor-not-allowed'
+                            : ''
+                        }`}
+                        title="Add Payment"
+                      >
+                        <FiDollarSign className="w-3 h-3" />
+                      </button>
+                      <button
+                        disabled={item.payment_status === 'UNPAID'}
+                        onClick={() => handleResetPayment(item)}
+                        className={`p-1.5 rounded-lg text-white text-xs transition-colors ${
+                          item.payment_status === 'UNPAID'
+                            ? 'bg-gray-400 cursor-not-allowed'
+                            : 'bg-red-600 hover:bg-red-700'
+                        }`}
+                        title="Reset Payment"
+                      >
+                        <FiTrash2 className="w-3 h-3" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          const defaultPercent =
+                            (Number(item.total_net_revenue_collect || 0) /
+                              Number(item.total_net_cash || 1)) * 100;
+                          setCommissionPercent(defaultPercent.toFixed(2));
+                          setEditingSettlement(item);
+                        }}
+                        className="p-1.5 rounded-lg bg-blue-600 text-white text-xs hover:bg-blue-700 transition-colors"
+                        title="Edit Commission"
+                      >
+                        <FiEdit2 className="w-3 h-3" />
+                      </button>
+                    </div>
                   </td>
                 </motion.tr>
               );
@@ -276,7 +393,7 @@ export default function AgentSettlementTable({
     </div>
   );
 
-  // Card View
+  // Card View (similar updates)
   const CardView = () => (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       <AnimatePresence>
@@ -324,7 +441,7 @@ export default function AgentSettlementTable({
                     <p className="font-semibold">{formatCurrency(item.total_net_cash)}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500">Due</p>
+                    <p className="text-xs text-gray-500">Total</p>
                     <p className="font-semibold">{formatCurrency(item.total_net_revenue_collect)}</p>
                   </div>
                   <div>
@@ -370,18 +487,41 @@ export default function AgentSettlementTable({
                   )}
                 </AnimatePresence>
 
-                <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700 flex gap-2">
                   <button
                     disabled={item.payment_status === 'FULLY_PAID' || item.payment_status === 'PAID'}
                     onClick={() => setSelectedPaymentBatch(item)}
-                    className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-green-600 text-white text-sm hover:bg-green-700 ${
+                    className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-green-600 text-white text-sm hover:bg-green-700 ${
                       item.payment_status === 'FULLY_PAID' || item.payment_status === 'PAID'
                         ? 'opacity-50 cursor-not-allowed'
                         : ''
                     }`}
                   >
                     <FiDollarSign className="w-4 h-4" />
-                    <span>Add Payment</span>
+                    <span>Payment</span>
+                  </button>
+                  <button
+                    disabled={item.payment_status === 'UNPAID'}
+                    onClick={() => handleResetPayment(item)}
+                    className={`px-3 py-2 rounded-lg text-white text-sm transition-colors ${
+                      item.payment_status === 'UNPAID'
+                        ? 'bg-gray-400 cursor-not-allowed'
+                        : 'bg-red-600 hover:bg-red-700'
+                    }`}
+                  >
+                    <FiTrash2 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      const defaultPercent =
+                        (Number(item.total_net_revenue_collect || 0) /
+                          Number(item.total_net_cash || 1)) * 100;
+                      setCommissionPercent(defaultPercent.toFixed(2));
+                      setEditingSettlement(item);
+                    }}
+                    className="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700"
+                  >
+                    <FiEdit2 className="w-4 h-4" />
                   </button>
                 </div>
               </div>
@@ -406,14 +546,14 @@ export default function AgentSettlementTable({
     <div className="space-y-4">
       <button
         onClick={onBack}
-        className="flex items-center gap-2 px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+        className="flex items-center gap-2 px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
       >
         <FiArrowLeft className="w-5 h-5" />
         <span>Back to Batches</span>
       </button>
 
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg overflow-hidden">
-        {/* HEADER */}
+        {/* HEADER - same as before */}
         <div className="p-6 border-b border-gray-200 dark:border-gray-700">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
             <div>
@@ -548,15 +688,13 @@ export default function AgentSettlementTable({
                     onClick={goToFirstPage}
                     disabled={currentPage === 1}
                     className="p-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    title="First page"
                   >
                     <FiChevronsLeft className="w-4 h-4" />
                   </button>
                   <button
                     onClick={goToPreviousPage}
                     disabled={currentPage === 1}
-                    className="p-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    title="Previous page"
+                    className="p-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50"
                   >
                     <FiChevronLeft className="w-4 h-4" />
                   </button>
@@ -590,16 +728,14 @@ export default function AgentSettlementTable({
                   <button
                     onClick={goToNextPage}
                     disabled={currentPage === totalPages}
-                    className="p-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    title="Next page"
+                    className="p-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50"
                   >
                     <FiChevronRight className="w-4 h-4" />
                   </button>
                   <button
                     onClick={goToLastPage}
                     disabled={currentPage === totalPages}
-                    className="p-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    title="Last page"
+                    className="p-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50"
                   >
                     <FiChevronsRight className="w-4 h-4" />
                   </button>
@@ -610,6 +746,122 @@ export default function AgentSettlementTable({
         )}
       </div>
 
+      {/* System Payment Confirmation Modal */}
+      <AnimatePresence>
+        {showSystemPaymentModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="w-full max-w-md rounded-2xl bg-white dark:bg-gray-800 shadow-xl overflow-hidden"
+            >
+              <div className="p-6">
+                <div className="flex items-center justify-center mb-4">
+                  <div className="w-16 h-16 rounded-full bg-yellow-100 dark:bg-yellow-900/30 flex items-center justify-center">
+                    <FiAlertTriangle className="w-8 h-8 text-yellow-600 dark:text-yellow-400" />
+                  </div>
+                </div>
+                <h2 className="text-xl font-bold text-center text-gray-900 dark:text-white mb-2">
+                  Confirm System Payment
+                </h2>
+                <p className="text-center text-gray-600 dark:text-gray-400 mb-4">
+                  Are you sure you want to mark this system payment as fully paid?
+                </p>
+                <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 mb-6">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600 dark:text-gray-400">Total System Payment:</span>
+                    <span className="font-bold text-purple-600 dark:text-purple-400">
+                      {formatCurrency(systemPaymentAmount)}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setShowSystemPaymentModal(false)}
+                    className="flex-1 px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={confirmSystemPayment}
+                    className="flex-1 px-4 py-2 rounded-lg bg-purple-600 text-white hover:bg-purple-700 transition-colors"
+                  >
+                    Confirm Payment
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Reset Payment Confirmation Modal */}
+      <AnimatePresence>
+        {showResetModal && selectedItemForReset && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="w-full max-w-md rounded-2xl bg-white dark:bg-gray-800 shadow-xl overflow-hidden"
+            >
+              <div className="p-6">
+                <div className="flex items-center justify-center mb-4">
+                  <div className="w-16 h-16 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                    <FiTrash2 className="w-8 h-8 text-red-600 dark:text-red-400" />
+                  </div>
+                </div>
+                <h2 className="text-xl font-bold text-center text-gray-900 dark:text-white mb-2">
+                  Reset Payment
+                </h2>
+                <p className="text-center text-gray-600 dark:text-gray-400 mb-4">
+                  Are you sure you want to reset this payment? This will set all payment records to zero.
+                </p>
+                <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 mb-6">
+                  <div className="flex justify-between text-sm mb-2">
+                    <span className="text-gray-600 dark:text-gray-400">Agent:</span>
+                    <span className="font-medium text-gray-900 dark:text-white">
+                      {selectedItemForReset.agent?.name}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600 dark:text-gray-400">Amount Paid:</span>
+                    <span className="font-medium text-green-600">
+                      {formatCurrency(selectedItemForReset.total_paid)}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setShowResetModal(false)}
+                    className="flex-1 px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={confirmResetPayment}
+                    className="flex-1 px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors"
+                  >
+                    Yes, Reset
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* PAYMENT MODAL */}
       {selectedPaymentBatch && (
         <PaymentModal
@@ -618,6 +870,79 @@ export default function AgentSettlementTable({
           onSuccess={fetchData}
         />
       )}
+
+      {/* EDIT COMMISSION MODAL */}
+      <AnimatePresence>
+        {editingSettlement && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="w-full max-w-md rounded-2xl bg-white dark:bg-gray-800 shadow-xl overflow-hidden"
+            >
+              <div className="p-6">
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white">Edit Commission</h2>
+                <p className="mt-1 text-sm text-gray-500">{editingSettlement.agent?.name}</p>
+
+                <div className="mt-5 space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Commission Percentage
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={commissionPercent}
+                      onChange={(e) => setCommissionPercent(e.target.value)}
+                      className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Enter percentage"
+                    />
+                  </div>
+
+                  <div className="rounded-lg bg-gray-50 dark:bg-gray-700/50 p-4">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600 dark:text-gray-400">Net Cash</span>
+                      <span className="font-medium text-gray-900 dark:text-white">
+                        {formatCurrency(editingSettlement.total_net_cash)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
+                      <span className="text-gray-600 dark:text-gray-400">Calculated Total</span>
+                      <span className="font-semibold text-blue-600">
+                        {formatCurrency(
+                          (Number(commissionPercent || 0) / 100) * Number(editingSettlement.total_net_cash || 0)
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-6 flex justify-end gap-3">
+                  <button
+                    onClick={() => setEditingSettlement(null)}
+                    className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    disabled={updatingCommission}
+                    onClick={handleUpdateCommission}
+                    className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  >
+                    {updatingCommission ? 'Saving...' : 'Save Changes'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

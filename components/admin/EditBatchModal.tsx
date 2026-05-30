@@ -39,177 +39,178 @@ export default function EditBatchModal({
   const round2 = (num: number) =>
     Number(num.toFixed(2));
 
-  async function handleSave() {
-    if (
-      commission < 0 ||
-      commission > 100
-    ) {
-      toast.error(
-        'Commission must be between 0 and 100'
+ async function handleSave() {
+  if (commission < 0 || commission > 100) {
+    toast.error(
+      'Commission must be between 0 and 100'
+    );
+    return;
+  }
+
+  if (
+    systemPayment < 0 ||
+    systemPayment > 100
+  ) {
+    toast.error(
+      'System payment must be between 0 and 100'
+    );
+    return;
+  }
+
+  try {
+    setLoading(true);
+
+    // =========================
+    // CALCULATE NEW BATCH TOTALS
+    // =========================
+
+    const batchNetCash = Number(
+      batch.total_net_cash || 0
+    );
+
+    const newExpectedCollection =
+      round2(
+        batchNetCash *
+          (commission / 100)
       );
-      return;
+
+    const newBatchSystemPayment =
+      round2(
+        batchNetCash *
+          (systemPayment / 100)
+      );
+
+    // =========================
+    // UPDATE BATCH
+    // =========================
+
+    const { error: batchError } =
+      await supabase
+        .from('upload_batches')
+        .update({
+          commission_percent:
+            round2(commission),
+
+          system_payment_percent:
+            round2(systemPayment),
+
+          settlement_week: week,
+
+          total_expected_collection:
+            newExpectedCollection,
+        })
+        .eq('id', batch.id);
+
+    if (batchError) {
+      throw batchError;
     }
 
-    if (
-      systemPayment < 0 ||
-      systemPayment > 100
-    ) {
-      toast.error(
-        'System payment must be between 0 and 100'
-      );
-      return;
+    // =========================
+    // GET ALL SETTLEMENTS
+    // =========================
+
+    const {
+      data: settlements,
+      error: settlementsError,
+    } = await supabase
+      .from('revenue_settlements')
+      .select('*')
+      .eq('batch_id', batch.id);
+
+    if (settlementsError) {
+      throw settlementsError;
     }
 
-    try {
-      setLoading(true);
-// =========================
-// CALCULATE NEW BATCH TOTALS
-// =========================
+    // =========================
+    // UPDATE SETTLEMENTS
+    // =========================
 
-const batchNetCash = Number(
-  batch.total_net_cash || 0
-);
+    if (settlements?.length) {
+      for (const item of settlements) {
+        const baseAmount = Number(
+          item.total_net_cash || 0
+        );
 
-const newExpectedCollection =
-  round2(
-    batchNetCash *
-      (commission / 100)
-  );
+        const totalPaid = Number(
+          item.total_paid || 0
+        );
 
-const newBatchSystemPayment =
-  round2(
-    newExpectedCollection *
-      (systemPayment / 100)
-  );
-
-// =========================
-// UPDATE BATCH
-// =========================
-
-const { error: batchError } =
-  await supabase
-    .from('upload_batches')
-    .update({
-      commission_percent:
-        round2(commission),
-
-      system_payment_percent:
-        round2(systemPayment),
-
-      settlement_week: week,
-
-      total_expected_collection:
-        newExpectedCollection,
-    })
-    .eq('id', batch.id);
-
-if (batchError) {
-  throw batchError;
-}
-
-      // =========================
-      // GET SETTLEMENTS
-      // =========================
-
-      const { data: settlements, error } =
-        await supabase
-          .from('revenue_settlements')
-          .select('*')
-          .eq('batch_id', batch.id);
-
-      if (error) {
-        throw error;
-      }
-
-      // =========================
-      // UPDATE EACH SETTLEMENT
-      // =========================
-
-      if (settlements?.length) {
-        for (const item of settlements) {
-          // SUPPORT BOTH total_ggr + total_net_cash
-          const baseAmount = Number(
-            item.total_net_cash ??
-              item.total_ggr ??
-              0
-          );
-
-          const totalPaid = Number(
-            item.total_paid || 0
-          );
-
-          const newNetRevenue = round2(
+        const newNetRevenue =
+          round2(
             baseAmount *
               (commission / 100)
           );
 
-          // USE EDITED VALUE
-       const newSystemPayment =
-  round2(
-    newNetRevenue *
-      (systemPayment / 100)
-  );
-
-          const remaining = round2(
-            newNetRevenue - totalPaid
+        const newSystemPayment =
+          round2(
+            baseAmount *
+              (systemPayment / 100)
           );
 
-          let status = 'UNPAID';
+        const remaining = round2(
+          newNetRevenue - totalPaid
+        );
 
-          if (
-            totalPaid > 0 &&
-            remaining > 0
-          ) {
-            status = 'PARTIALLY_PAID';
-          } else if (remaining <= 0) {
-            status = 'FULLY_PAID';
-          }
+        let status = 'UNPAID';
 
-          const { error: updateError } =
-            await supabase
-              .from(
-                'revenue_settlements'
-              )
-              .update({
-                total_net_revenue_collect:
-                  newNetRevenue,
+        if (
+          totalPaid > 0 &&
+          remaining > 0
+        ) {
+          status = 'PARTIALLY_PAID';
+        } else if (remaining <= 0) {
+          status = 'FULLY_PAID';
+        }
 
-                total_system_payment:
-                  newSystemPayment,
+        const {
+          error: updateError,
+        } = await supabase
+          .from(
+            'revenue_settlements'
+          )
+          .update({
+            total_net_revenue_collect:
+              newNetRevenue,
 
-                remaining_balance:
-                  remaining,
+            total_system_payment:
+              newSystemPayment,
 
-                payment_status: status,
+            remaining_balance:
+              remaining,
 
-                settlement_date: week,
-              })
-              .eq('id', item.id);
+            payment_status: status,
 
-          if (updateError) {
-            console.log(updateError);
-          }
+            settlement_date: week,
+          })
+          .eq('id', item.id);
+
+        if (updateError) {
+          console.log(
+            'Settlement update error:',
+            updateError
+          );
         }
       }
-
-      toast.success(
-        'Batch updated successfully'
-      );
-
-      onSuccess();
-
-      onClose();
-    } catch (err: any) {
-      console.error(err);
-
-      toast.error(
-        err.message ||
-          'Failed to update batch'
-      );
-    } finally {
-      setLoading(false);
     }
+
+    toast.success(
+      'Batch updated successfully'
+    );
+
+    onSuccess();
+
+    onClose();
+  } catch (err: any) {
+    console.error(err);
+
+    toast.error(
+      err.message ||
+        'Failed to update batch'
+    );
+  } finally {
+    setLoading(false);
   }
+}
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
