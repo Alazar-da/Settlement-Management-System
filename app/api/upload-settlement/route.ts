@@ -9,9 +9,28 @@ import { supabase } from '@/lib/supabase';
 const round2 = (num: number) =>
   Number(num.toFixed(2));
 
+
+
 export async function POST(req: Request) {
   try {
     const formData = await req.formData();
+
+    const cashierAssignments = JSON.parse(
+  String(
+    formData.get('cashierAssignments') || '[]'
+  )
+);
+
+const assignmentMap = new Map(
+  cashierAssignments
+    .filter((x: any) => x.agent_id)
+    .map((x: any) => [
+      x.cashier_name
+        .toLowerCase()
+        .trim(),
+      x.agent_id,
+    ])
+);
 
     const file = formData.get('file') as File;
 
@@ -124,25 +143,77 @@ for (let i = 1; i < rows.length; i++) {
   // FIND CASHIER
   // =========================
 
-  const { data: cashier } =
-    await supabase
-      .from('cashiers')
-      .select(
-        `
-        *,
-        agents(*)
-      `
-      )
-      .ilike('name', cashierName)
-      .single();
+let { data: cashier } =
+  await supabase
+    .from('cashiers')
+    .select(`
+      *,
+      agents(*)
+    `)
+    .ilike('name', cashierName)
+    .maybeSingle();
 
-  if (!cashier) {
-    console.log(
-      `Cashier not found: ${cashierName}`
+// =========================
+// CASHIER DOES NOT EXIST
+// =========================
+
+if (!cashier) {
+  const assignedAgent =
+    assignmentMap.get(
+      cashierName
+        .toLowerCase()
+        .trim()
     );
 
+  // Skip new cashier if user did not select an agent
+  if (!assignedAgent) {
     continue;
   }
+
+  const {
+    data: newCashier,
+    error: createError,
+  } = await supabase
+    .from('cashiers')
+    .insert({
+      name: cashierName,
+      agent_id: assignedAgent,
+    })
+  }
+
+// =========================
+// CASHIER EXISTS
+// BUT NO AGENT
+// =========================
+
+if (
+  cashier &&
+  !cashier.agent_id
+) {
+  const assignedAgent =
+    assignmentMap.get(
+      cashierName
+        .toLowerCase()
+        .trim()
+    );
+
+  // Existing cashier without agent
+  // Skip if no agent selected
+  if (!assignedAgent) {
+    continue;
+  }
+}
+
+// =========================
+// FINAL SAFETY CHECK
+// =========================
+
+if (
+  !cashier ||
+  !cashier.agent_id
+) {
+  continue;
+}
 
   const agentId = cashier.agent_id;
 
