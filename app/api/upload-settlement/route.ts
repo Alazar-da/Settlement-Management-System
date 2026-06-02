@@ -170,15 +170,27 @@ if (!cashier) {
     continue;
   }
 
-  const {
-    data: newCashier,
-    error: createError,
-  } = await supabase
-    .from('cashiers')
-    .insert({
-      name: cashierName,
-      agent_id: assignedAgent,
-    })
+const {
+  data: newCashier,
+  error: createError,
+} = await supabase
+  .from('cashiers')
+  .insert({
+    name: cashierName,
+    agent_id: assignedAgent,
+  })
+  .select(`
+    *,
+    agents(*)
+  `)
+  .single();
+
+if (createError) {
+  console.log(createError);
+  continue;
+}
+
+cashier = newCashier;
   }
 
 // =========================
@@ -197,11 +209,33 @@ if (
         .trim()
     );
 
-  // Existing cashier without agent
-  // Skip if no agent selected
   if (!assignedAgent) {
     continue;
   }
+
+  const { error } =
+    await supabase
+      .from('cashiers')
+      .update({
+        agent_id: assignedAgent,
+      })
+      .eq('id', cashier.id);
+
+  if (error) {
+    console.log(error);
+    continue;
+  }
+
+  cashier.agent_id = assignedAgent;
+
+  const { data: agent } =
+    await supabase
+      .from('agents')
+      .select('*')
+      .eq('id', assignedAgent)
+      .single();
+
+  cashier.agents = agent;
 }
 
 // =========================
@@ -274,6 +308,20 @@ if (
     // =========================
     // CREATE BATCH
     // =========================
+
+    if (
+  Object.keys(groupedAgents).length === 0
+) {
+  return NextResponse.json(
+    {
+      error:
+        'No valid cashier assignments found',
+    },
+    {
+      status: 400,
+    }
+  );
+}
 
     const { data: batch, error: batchError } =
       await supabase
