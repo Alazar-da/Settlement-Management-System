@@ -284,7 +284,7 @@ setBatches(finalData);
 
   // Card View
   const CardView = () => (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
       <AnimatePresence>
         {batches.map((batch, index) => (
           <motion.div
@@ -411,7 +411,7 @@ setBatches(finalData);
     <>
       <div className="glass-card p-6">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+        <div className="flex flex-col items-end sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div>
             <h2 className="text-xl font-bold text-gray-900 dark:text-white">Uploaded Settlement Batches</h2>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
@@ -420,7 +420,7 @@ setBatches(finalData);
           </div>
 
           {/* View Toggle */}
-          <div className="flex rounded-lg bg-gray-100 dark:bg-gray-700 p-1">
+          <div className="flex rounded-lg bg-gray-100 dark:bg-gray-700 p-1 w-fit">
             <button
               onClick={() => setViewMode('table')}
               className={`p-2 rounded-md transition-all duration-200 ${

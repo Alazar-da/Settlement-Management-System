@@ -221,7 +221,7 @@ export default function SystemsPage() {
   const goToLastPage = () => setCurrentPage(totalPages);
 
   return (
-    <div className="p-6">
+    <div className="sm:p-2">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
@@ -241,7 +241,7 @@ export default function SystemsPage() {
 
       {/* Search Bar */}
       <div className="mb-4">
-        <div className="relative max-w-md">
+        <div className="relative sm:max-w-md w-full">
           <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             type="text"

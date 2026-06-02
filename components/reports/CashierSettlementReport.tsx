@@ -385,7 +385,7 @@ for (let row = range.s.r; row <= range.e.r; row++) {
             </p>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex sm:flex-row flex-col gap-2">
             <button
               onClick={exportStandardExcel}
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"

@@ -68,7 +68,7 @@ export default function ReportsPage() {
   }
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6 sm:p-2">
       <KPISection settlements={settlements} agents={agents} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
