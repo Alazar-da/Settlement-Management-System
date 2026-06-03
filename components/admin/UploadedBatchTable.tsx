@@ -50,6 +50,28 @@ function UploadedBatchTable({
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
   const [editBatch, setEditBatch] = useState<any>(null);
   const [deleteBatch, setDeleteBatch] = useState<any>(null);
+
+  useEffect(() => {
+  const handleResize = () => {
+    if (window.innerWidth < 768) {
+      setViewMode('card');
+    } else {
+      setViewMode('table');
+    }
+  };
+
+  // Initial check
+  handleResize();
+
+  window.addEventListener('resize', handleResize);
+
+  return () => {
+    window.removeEventListener(
+      'resize',
+      handleResize
+    );
+  };
+}, []);
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);

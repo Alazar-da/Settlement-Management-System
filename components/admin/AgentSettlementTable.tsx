@@ -60,6 +60,28 @@ export default function AgentSettlementTable({
   const [totalCount, setTotalCount] = useState(0);
 
   useEffect(() => {
+  const handleResize = () => {
+    if (window.innerWidth < 768) {
+      setViewMode('card');
+    } else {
+      setViewMode('table');
+    }
+  };
+
+  // Initial check
+  handleResize();
+
+  window.addEventListener('resize', handleResize);
+
+  return () => {
+    window.removeEventListener(
+      'resize',
+      handleResize
+    );
+  };
+}, []);
+
+  useEffect(() => {
     fetchData();
     fetchBatchInfo();
   }, [batchId]);
@@ -567,22 +589,23 @@ export default function AgentSettlementTable({
               )}
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
-              <div className="relative">
+            <div className="flex flex-col sm:flex-row items-end gap-3 w-full lg:w-auto">
+              <div className="relative w-full sm:w-auto">
                 <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
                   type="text"
                   placeholder="Search agent..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-9 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+                  className="pl-9 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm w-full"
                 />
               </div>
 
+              
               <select
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
-                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm w-full"
               >
                 <option value="all">All Status</option>
                 <option value="paid">Paid</option>
@@ -590,7 +613,7 @@ export default function AgentSettlementTable({
                 <option value="unpaid">Unpaid</option>
               </select>
 
-              <div className="flex rounded-lg bg-gray-100 dark:bg-gray-700 p-1">
+    <div className="flex rounded-lg bg-gray-100 dark:bg-gray-700 p-1 w-fit">
                 <button
                   onClick={() => setViewMode('table')}
                   className={`p-2 rounded-md ${
