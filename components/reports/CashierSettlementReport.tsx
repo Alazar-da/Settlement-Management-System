@@ -199,18 +199,36 @@ const exportFormattedExcel = () => {
   try {
     const exportData: any[] = [];
 
-    // Title
-    exportData.push({ A: 'CASHIER SETTLEMENT REPORT', B: '' });
-    exportData.push({ A: `Generated: ${new Date().toLocaleString()}`, B: '' });
+    // Report title
+    exportData.push({
+      A: 'CASHIER SETTLEMENT REPORT',
+      B: '',
+    });
+
+    exportData.push({
+      A: `Generated: ${new Date().toLocaleString()}`,
+      B: '',
+    });
+
     exportData.push({ A: '', B: '' });
 
-    // Group data by agent
+    // Table Header
+    exportData.push({
+      A: 'Owner Name',
+      B: 'Grand Total',
+    });
+
+    // Group by Agent
     const agentGroups = new Map();
+
     filteredData.forEach((item) => {
-      const agentName = item.agent?.name || 'Unknown Agent';
+      const agentName =
+        item.agent?.name || 'Unknown Agent';
+
       if (!agentGroups.has(agentName)) {
         agentGroups.set(agentName, []);
       }
+
       agentGroups.get(agentName).push({
         system: item.system_type,
         cashier: item.cashier?.name,
@@ -218,122 +236,281 @@ const exportFormattedExcel = () => {
       });
     });
 
-    // For each agent, show their sections
     let grandTotalCalc = 0;
-    const agentEntries = Array.from(agentGroups.entries());
 
-    agentEntries.forEach(([agentName, items], agentIndex) => {
-      // Calculate agent total
-      const agentTotal = items.reduce((sum: number, item: any) => sum + item.amount, 0);
-      grandTotalCalc += agentTotal;
+    const agentEntries = Array.from(
+      agentGroups.entries()
+    );
 
-      // Owner row
-      exportData.push({ A: agentName, B: agentTotal });
-      
-      // Group by system within this agent
-      const systemGroups = new Map();
-      items.forEach((item: any) => {
-        const systemName = item.system || 'Unknown';
-        if (!systemGroups.has(systemName)) {
-          systemGroups.set(systemName, { total: 0, cashiers: [] });
+    agentEntries.forEach(
+      ([agentName, items]: [string, any], index) => {
+        const agentTotal = items.reduce(
+          (sum: number, item: any) =>
+            sum + item.amount,
+          0
+        );
+
+        grandTotalCalc += agentTotal;
+
+        // Owner Row
+        exportData.push({
+          A: agentName,
+          B: agentTotal,
+        });
+
+        // Group by system
+        const systemGroups = new Map();
+
+        items.forEach((item: any) => {
+          const systemName =
+            item.system || 'Unknown';
+
+          if (!systemGroups.has(systemName)) {
+            systemGroups.set(systemName, {
+              total: 0,
+              cashiers: [],
+            });
+          }
+
+          systemGroups.get(systemName).total +=
+            item.amount;
+
+          systemGroups
+            .get(systemName)
+            .cashiers.push({
+              name: item.cashier,
+              amount: item.amount,
+            });
+        });
+
+        // Systems & Cashiers
+        Array.from(systemGroups.entries()).forEach(
+          ([systemName, systemData]: [string, any]) => {
+            exportData.push({
+              A: `  ${systemName}`,
+              B: systemData.total,
+            });
+
+            systemData.cashiers.forEach(
+              (cashier: any) => {
+                exportData.push({
+                  A: `    ${cashier.name}`,
+                  B: cashier.amount,
+                });
+              }
+            );
+          }
+        );
+
+        // Agent Total
+        exportData.push({
+          A: `${agentName} TOTAL`,
+          B: agentTotal,
+        });
+
+        if (
+          index <
+          agentEntries.length - 1
+        ) {
+          exportData.push({
+            A: '',
+            B: '',
+          });
         }
-        systemGroups.get(systemName).total += item.amount;
-        systemGroups.get(systemName).cashiers.push({
-          name: item.cashier,
-          amount: item.amount,
-        });
-      });
-
-      // System rows (indented)
-      const systemEntries = Array.from(systemGroups.entries());
-      systemEntries.forEach(([systemName, systemData]: [string, any]) => {
-        exportData.push({ A: `  ${systemName}`, B: systemData.total });
-        
-        // Cashier rows (further indented)
-        systemData.cashiers.forEach((cashier: any) => {
-          exportData.push({ A: `    ${cashier.name}`, B: cashier.amount });
-        });
-      });
-
-      // Agent Grand Total row
-      exportData.push({ A: `${agentName} TOTAL`, B: agentTotal });
-
-      // Add empty row between agents (except after last agent)
-      if (agentIndex < agentEntries.length - 1) {
-        exportData.push({ A: '', B: '' });
       }
+    );
+
+    // Final Grand Total
+    exportData.push({
+      A: '',
+      B: '',
     });
 
-    // Add empty row before grand total
-    exportData.push({ A: '', B: '' });
-    exportData.push({ A: 'GRAND TOTAL', B: grandTotalCalc });
-
-    const worksheet = XLSX.utils.json_to_sheet(exportData, { skipHeader: true });
-    
-    // Set column widths
-    worksheet['!cols'] = [{ wch: 35 }, { wch: 15 }];
-    
-    // Apply styling to all rows in first column (light blue background)
-    const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1:B1');
-    for (let row = range.s.r; row <= range.e.r; row++) {
-      const cellAddress = XLSX.utils.encode_cell({ r: row, c: 0 });
-      if (!worksheet[cellAddress]) continue;
-      
-      // Add style to first column cells
-for (let row = range.s.r; row <= range.e.r; row++) {
-  for (let col = 0; col <= 1; col++) {
-    const cellAddress = XLSX.utils.encode_cell({
-      r: row,
-      c: col,
+    exportData.push({
+      A: 'GRAND TOTAL',
+      B: grandTotalCalc,
     });
 
-    if (!worksheet[cellAddress]) continue;
+    const worksheet =
+      XLSX.utils.json_to_sheet(exportData, {
+        skipHeader: true,
+      });
 
-    worksheet[cellAddress].s = {
-      fill: {
-        patternType: 'solid',
-        fgColor: {
-          rgb: col === 0 ? 'D6E6F5' : 'FFFFFF',
-        },
-      },
-      border: {
-        top: {
-          style: 'thin',
-          color: { rgb: 'CCCCCC' },
-        },
-        bottom: {
-          style: 'thin',
-          color: { rgb: 'CCCCCC' },
-        },
-        left: {
-          style: 'thin',
-          color: { rgb: 'CCCCCC' },
-        },
-        right: {
-          style: 'thin',
-          color: { rgb: 'CCCCCC' },
-        },
-      },
-    };
-  }
-}
-    }
+    worksheet['!cols'] = [
+      { wch: 40 },
+      { wch: 20 },
+    ];
 
-    // Format numbers in second column (no currency symbol, just numbers)
-    for (let row = range.s.r; row <= range.e.r; row++) {
-      const cellAddress = XLSX.utils.encode_cell({ r: row, c: 1 });
-      if (worksheet[cellAddress] && typeof worksheet[cellAddress].v === 'number') {
-        worksheet[cellAddress].z = '0'; // Number format without decimals
+    const range = XLSX.utils.decode_range(
+      worksheet['!ref'] || 'A1:B1'
+    );
+
+    for (
+      let row = range.s.r;
+      row <= range.e.r;
+      row++
+    ) {
+      const label =
+        worksheet[`A${row + 1}`]?.v?.toString() ||
+        '';
+
+      const isTitle = row === 0;
+      const isGenerated = row === 1;
+      const isHeader = row === 3;
+
+      const isSystemRow =
+        label.startsWith('  ') &&
+        !label.startsWith('    ');
+
+      const isCashierRow =
+        label.startsWith('    ');
+
+      const isTotalRow =
+        label.includes('TOTAL') ||
+        label === 'GRAND TOTAL';
+
+      const isOwnerRow =
+        !isTitle &&
+        !isGenerated &&
+        !isHeader &&
+        !isSystemRow &&
+        !isCashierRow &&
+        !isTotalRow &&
+        label !== '';
+
+      for (
+        let col = 0;
+        col <= 1;
+        col++
+      ) {
+        const cellRef =
+          XLSX.utils.encode_cell({
+            r: row,
+            c: col,
+          });
+
+        if (!worksheet[cellRef]) continue;
+
+        let bgColor = 'D9E2F3';
+        let fontColor = '2F5597';
+        let bold = true;
+        let fontSize = 14;
+
+        if (isHeader) {
+          bgColor = 'A9B9D3';
+          fontColor = '2F5597';
+          bold = true;
+          fontSize = 18;
+        } else if (isOwnerRow) {
+          bold = true;
+          fontColor = '000000';
+          fontSize = 16;
+        } else if (isTotalRow) {
+          bold = true;
+          fontColor = '2F5597';
+          fontSize = 16;
+        }
+
+        worksheet[cellRef].s = {
+font: {
+  bold: true,
+  sz:
+    col === 1 && !isHeader && !isOwnerRow && !isTotalRow
+      ? 12 // Amount column always 12
+      : isHeader
+      ? 18
+      : isOwnerRow || isTotalRow
+      ? 16
+      : 14,
+  color: {
+    rgb: isOwnerRow ? '000000' : '2F5597',
+  },
+},
+
+  fill: {
+    patternType: 'solid',
+    fgColor: {
+      rgb:
+         col === 0
+        ? 'AFC4E8' // DARKER BLUE COLUMN A
+        : 'D9E2F3', // LIGHTER BLUE COLUMN B
+    },
+  },
+
+  alignment: {
+    vertical: 'center',
+    horizontal:
+      col === 1 ? 'right' : 'left',
+  },
+
+  border: {
+    top: {
+      style: 'thin',
+      color: { rgb: '000000' },
+    },
+    bottom: {
+      style: 'thin',
+      color: { rgb: '000000' },
+    },
+    left: {
+      style: 'thin',
+      color: { rgb: '000000' },
+    },
+    right: {
+      style: 'thin',
+      color: { rgb: '000000' },
+    },
+  },
+};
       }
     }
 
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Cashier Report');
-    XLSX.writeFile(workbook, `cashier-report-${new Date().toISOString()}.xlsx`);
-    toast.success('Formatted Excel exported');
+    // Format amount column
+    for (
+      let row = range.s.r;
+      row <= range.e.r;
+      row++
+    ) {
+      const cellRef =
+        XLSX.utils.encode_cell({
+          r: row,
+          c: 1,
+        });
+
+      if (
+        worksheet[cellRef] &&
+        typeof worksheet[cellRef].v ===
+          'number'
+      ) {
+        worksheet[cellRef].z =
+          '#,##0.00';
+      }
+    }
+
+    const workbook =
+      XLSX.utils.book_new();
+
+    XLSX.utils.book_append_sheet(
+      workbook,
+      worksheet,
+      'Cashier Report'
+    );
+
+    XLSX.writeFile(
+      workbook,
+      `cashier-report-${new Date()
+        .toISOString()
+        .slice(0, 10)}.xlsx`
+    );
+
+    toast.success(
+      'Formatted Excel exported'
+    );
   } catch (error) {
-    console.log(error);
-    toast.error('Failed to export excel');
+    console.error(error);
+    toast.error(
+      'Failed to export excel'
+    );
   }
 };
 
