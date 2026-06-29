@@ -15,10 +15,10 @@ export default function EditBatchModal({
   onClose,
   onSuccess,
 }: any) {
-  const [commission, setCommission] =
+/*   const [commission, setCommission] =
     useState(
       Number(batch.commission_percent || 0)
-    );
+    ); */
 
   // THIS WILL ONLY UPDATE THIS BATCH
   const [systemPayment, setSystemPayment] =
@@ -40,12 +40,12 @@ export default function EditBatchModal({
     Number(num.toFixed(2));
 
  async function handleSave() {
-  if (commission < 0 || commission > 100) {
+/*   if (commission < 0 || commission > 100) {
     toast.error(
       'Commission must be between 0 and 100'
     );
     return;
-  }
+  } */
 
   if (
     systemPayment < 0 ||
@@ -68,11 +68,11 @@ export default function EditBatchModal({
       batch.total_net_cash || 0
     );
 
-    const newExpectedCollection =
+/*     const newExpectedCollection =
       round2(
         batchNetCash *
           (commission / 100)
-      );
+      ); */
 
     const newBatchSystemPayment =
       round2(
@@ -88,16 +88,16 @@ export default function EditBatchModal({
       await supabase
         .from('upload_batches')
         .update({
-          commission_percent:
-            round2(commission),
+          /* commission_percent:
+            round2(commission), */
 
           system_payment_percent:
             round2(systemPayment),
 
           settlement_week: week,
 
-          total_expected_collection:
-            newExpectedCollection,
+ /*          total_expected_collection:
+            newExpectedCollection, */
         })
         .eq('id', batch.id);
 
@@ -131,15 +131,15 @@ export default function EditBatchModal({
           item.total_net_cash || 0
         );
 
-        const totalPaid = Number(
+      /*   const totalPaid = Number(
           item.total_paid || 0
-        );
+        ); */
 
-        const newNetRevenue =
+       /*  const newNetRevenue =
           round2(
             baseAmount *
               (commission / 100)
-          );
+          ); */
 
         const newSystemPayment =
           round2(
@@ -147,20 +147,20 @@ export default function EditBatchModal({
               (systemPayment / 100)
           );
 
-        const remaining = round2(
+     /*    const remaining = round2(
           newNetRevenue - totalPaid
-        );
+        ); */
 
-        let status = 'UNPAID';
+        /* let status = 'UNPAID'; */
 
-        if (
+       /*  if (
           totalPaid > 0 &&
           remaining > 0
         ) {
           status = 'PARTIALLY_PAID';
         } else if (remaining <= 0) {
           status = 'FULLY_PAID';
-        }
+        } */
 
         const {
           error: updateError,
@@ -169,17 +169,17 @@ export default function EditBatchModal({
             'revenue_settlements'
           )
           .update({
-            total_net_revenue_collect:
-              newNetRevenue,
+           /*  total_net_revenue_collect:
+              newNetRevenue, */
 
             total_system_payment:
               newSystemPayment,
 
-            remaining_balance:
+            /* remaining_balance:
               remaining,
-
-            payment_status: status,
-
+ */
+            /* payment_status: status,
+ */
             settlement_date: week,
           })
           .eq('id', item.id);
@@ -245,7 +245,7 @@ export default function EditBatchModal({
         {/* Content */}
         <div className="p-6 space-y-4">
           {/* COMMISSION */}
-          <div>
+        {/*   <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               <FiPercent className="inline w-4 h-4 mr-1" />
               Commission (%)
@@ -264,7 +264,7 @@ export default function EditBatchModal({
               }
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             />
-          </div>
+          </div> */}
 
           {/* SYSTEM PAYMENT */}
           <div>

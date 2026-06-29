@@ -197,53 +197,63 @@ export default function AgentSettlementTable({
     }
   }
 
-  async function handleUpdateCommission() {
-    if (!editingSettlement) return;
+async function handleUpdateCommission() {
+  if (!editingSettlement) return;
 
-    try {
-      setUpdatingCommission(true);
-      const percent = Number(commissionPercent);
+  try {
+    setUpdatingCommission(true);
+    const percent = Number(commissionPercent);
 
-      if (isNaN(percent) || percent <= 0) {
-        toast.error('Invalid commission percentage');
-        return;
-      }
-
-      const totalNetCash = Number(editingSettlement.total_net_cash || 0);
-      const totalRevenueCollect = (percent / 100) * totalNetCash;
-      const remainingBalance = totalRevenueCollect - Number(editingSettlement.total_paid || 0);
-
-      let paymentStatus = 'UNPAID';
-      if (Number(editingSettlement.total_paid || 0) >= totalRevenueCollect) {
-        paymentStatus = 'PAID';
-      } else if (Number(editingSettlement.total_paid || 0) > 0) {
-        paymentStatus = 'PARTIALLY_PAID';
-      }
-
-      const { error } = await supabase
-        .from('revenue_settlements')
-        .update({
-          total_net_revenue_collect: totalRevenueCollect,
-          remaining_balance: remainingBalance,
-          payment_status: paymentStatus,
-        })
-        .eq('id', editingSettlement.id);
-
-      if (error) {
-        toast.error('Failed to update commission');
-        return;
-      }
-
-      toast.success('Commission updated');
-      setEditingSettlement(null);
-      fetchData();
-    } catch (error) {
-      console.log(error);
-      toast.error('Failed to update commission');
-    } finally {
-      setUpdatingCommission(false);
+    if (isNaN(percent) || percent <= 0) {
+      toast.error('Invalid commission percentage');
+      return;
     }
+
+    if (percent > 100) {
+      toast.error('Commission percentage cannot exceed 100%');
+      return;
+    }
+
+    const totalNetCash = Number(editingSettlement.total_net_cash || 0);
+    const totalRevenueCollect = (percent / 100) * totalNetCash;
+    const totalPaid = Number(editingSettlement.total_paid || 0);
+    const remainingBalance = totalRevenueCollect - totalPaid;
+
+    // Determine payment status
+    let paymentStatus = 'UNPAID';
+    if (totalPaid >= totalRevenueCollect && totalRevenueCollect > 0) {
+      paymentStatus = 'FULLY_PAID';
+    } else if (totalPaid > 0 && totalPaid < totalRevenueCollect) {
+      paymentStatus = 'PARTIALLY_PAID';
+    }
+
+    // Update the settlement
+    const { error } = await supabase
+      .from('revenue_settlements')
+      .update({
+        total_net_revenue_collect: totalRevenueCollect,
+        remaining_balance: remainingBalance,
+        payment_status: paymentStatus,
+        commission_percent: percent, // Use snake_case to match column name
+      })
+      .eq('id', editingSettlement.id);
+
+    if (error) {
+      console.error('Update error:', error);
+      toast.error('Failed to update commission');
+      return;
+    }
+
+    toast.success(`Commission updated to ${percent}%`);
+    setEditingSettlement(null);
+    fetchData();
+  } catch (error) {
+    console.error('Error:', error);
+    toast.error('Failed to update commission');
+  } finally {
+    setUpdatingCommission(false);
   }
+}
 
   const getStatusConfig = (status: string) => {
     switch (status) {
@@ -314,7 +324,7 @@ export default function AgentSettlementTable({
         <thead>
           <tr className="border-b border-gray-200 dark:border-gray-700">
             <th className="text-left py-3 px-3 text-sm font-semibold">Agent</th>
-            <th className="text-left py-3 px-3 text-sm font-semibold">System</th>
+            <th className="text-left py-3 px-3 text-sm font-semibold">Commission %</th>
             <th className="text-right py-3 px-3 text-sm font-semibold">Net Cash</th>
             <th className="text-right py-3 px-3 text-sm font-semibold">Total</th>
             <th className="text-right py-3 px-3 text-sm font-semibold">Paid</th>
@@ -342,10 +352,9 @@ export default function AgentSettlementTable({
                       {item.agent?.name || 'Unknown Agent'}
                     </div>
                   </td>
-                  <td className="py-3 px-3">
-                    <span className="px-2 py-1 text-xs rounded-full bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400">
-                      {item.system_type}
-                    </span>
+                  <td className="py-3 px-3 flex justify-center">
+                       {item.commission_percent}%
+                   
                   </td>
                   <td className="py-3 px-3 text-right font-semibold">
                     {formatCurrency(item.total_net_cash)}
@@ -393,10 +402,7 @@ export default function AgentSettlementTable({
                       </button>
                       <button
                         onClick={() => {
-                          const defaultPercent =
-                            (Number(item.total_net_revenue_collect || 0) /
-                              Number(item.total_net_cash || 1)) * 100;
-                          setCommissionPercent(defaultPercent.toFixed(2));
+                           setCommissionPercent(item.commission_percent);
                           setEditingSettlement(item);
                         }}
                         className="p-1.5 rounded-lg bg-blue-600 text-white text-xs hover:bg-blue-700 transition-colors"
@@ -438,10 +444,9 @@ export default function AgentSettlementTable({
                     <h3 className="font-semibold text-gray-900 dark:text-white">
                       {item.agent?.name || 'Unknown Agent'}
                     </h3>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="px-2 py-0.5 text-xs rounded-full bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400">
-                        {item.system_type}
-                      </span>
+                    <div className="flex items-center gap-2 mt-1 text-sm">
+                             {item.commission_percent}%
+                     
                       <div className="flex items-center gap-1">
                         <StatusIcon className={`w-3 h-3 ${statusConfig.textColor}`} />
                         <span className={`text-xs ${statusConfig.textColor}`}>{statusConfig.label}</span>
@@ -535,10 +540,8 @@ export default function AgentSettlementTable({
                   </button>
                   <button
                     onClick={() => {
-                      const defaultPercent =
-                        (Number(item.total_net_revenue_collect || 0) /
-                          Number(item.total_net_cash || 1)) * 100;
-                      setCommissionPercent(defaultPercent.toFixed(2));
+                     
+                      setCommissionPercent(item.commission_percent);
                       setEditingSettlement(item);
                     }}
                     className="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700"
@@ -583,7 +586,8 @@ export default function AgentSettlementTable({
               {batchInfo && (
                 <p className="text-sm text-gray-500 mt-1">
                   Week: {new Date(batchInfo.settlement_week).toLocaleDateString()} {' • '}
-                  Commission: {Number(batchInfo.commission_percent).toFixed(2)}% {' • '}
+                  System: <span className="px-2 py-1 text-xs rounded-full bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400">
+                   {batchInfo.system_type}</span> {' • '}
                   System Payment: {Number(batchInfo.system_payment_percent).toFixed(2)}%
                 </p>
               )}

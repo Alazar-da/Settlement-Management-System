@@ -333,9 +333,9 @@ if (
 
           uploaded_file_name: file.name,
 
-          commission_percent: round2(
+       /*    commission_percent: round2(
             commission
-          ),
+          ), */
 
           system_payment_percent: round2(
             system.system_payment_percentage
@@ -373,10 +373,23 @@ if (
         agent.totalNetCash
       );
 
-      const collection = round2(
-        agentNetCash *
-          (commission / 100)
-      );
+    const { data: agentCommission } =
+  await supabase
+    .from('agent_system_commissions')
+    .select('commission_percent')
+    .eq('agent_id', agentId)
+    .eq('system_id', systemId)
+    .single();
+
+const commissionPercent =
+  Number(
+    agentCommission?.commission_percent ?? 10
+  );
+
+const collection = round2(
+  agentNetCash *
+    (commissionPercent / 100)
+);
 
       const systemPayment = round2(
         agentNetCash *
@@ -403,6 +416,9 @@ if (
           system_id: systemId,
 
           system_type: system.name,
+
+          commission_percent:
+  commissionPercent,
 
           total_net_cash: agentNetCash,
 

@@ -220,10 +220,10 @@ setBatches(finalData);
               <FiFile className="inline w-4 h-4 mr-1" />
               File Name
             </th>
-            <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600 dark:text-gray-400">
+           {/*  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600 dark:text-gray-400">
               <FiPercent className="inline w-4 h-4 mr-1" />
               Commission
-            </th>
+            </th> */}
             <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600 dark:text-gray-400">
               <FiPercent className="inline w-4 h-4 mr-1" />
               System Payment
@@ -259,9 +259,9 @@ setBatches(finalData);
                 <td className="py-3 px-4 text-sm text-gray-600 dark:text-gray-400 max-w-xs truncate">
                   {batch.uploaded_file_name}
                 </td>
-                <td className="py-3 px-4 text-sm font-medium text-gray-900 dark:text-white">
+               {/*  <td className="py-3 px-4 text-sm font-medium text-gray-900 dark:text-white">
                   {Number(batch.commission_percent).toFixed(2)}%
-                </td>
+                </td> */}
                 <td className="py-3 px-4 text-sm font-medium text-gray-900 dark:text-white">
                   {Number(batch.system_payment_percent).toFixed(2)}%
                 </td>
@@ -349,12 +349,12 @@ setBatches(finalData);
                     <p className="text-xs text-gray-500">{formatDate(batch.settlement_week)}</p>
                   </div>
                 </div>
-                <div className="flex items-center justify-between">
+               {/*  <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-600 dark:text-gray-400">Commission</span>
                   <span className="text-sm font-semibold text-primary-600 dark:text-primary-400">
                     {batch.commission_percent}%
                   </span>
-                </div>
+                </div> */}
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-600 dark:text-gray-400">System Payment</span>
                   <span className="text-sm font-semibold text-secondary-600 dark:text-secondary-400">

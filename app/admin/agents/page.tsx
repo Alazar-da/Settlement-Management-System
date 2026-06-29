@@ -15,9 +15,11 @@ import {
   FiChevronsRight,
   FiSearch,
   FiX,
+  FiDollarSign,
 } from 'react-icons/fi';
 import toast from 'react-hot-toast';
 import Modal from '@/components/Modal';
+import AgentCommissionModal from '@/components/admin/AgentCommissionModal';
 
 interface Agent {
   id: string;
@@ -55,6 +57,9 @@ export default function AgentsPage() {
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
+
+  const [openCommissionModal, setOpenCommissionModal] = useState(false);
+  const [agentId, setAgentId]=useState('');
 
   useEffect(() => {
     fetchTotalCount();
@@ -100,29 +105,84 @@ export default function AgentsPage() {
     setLoading(false);
   }
 
-  async function handleAddAgent(e: React.FormEvent) {
-    e.preventDefault();
-    if (!formData.name) {
-      toast.error('Please fill the agent name');
+async function handleAddAgent(e: React.FormEvent) {
+  e.preventDefault();
+  if (!formData.name) {
+    toast.error('Please fill the agent name');
+    return;
+  }
+
+  setSubmitting(true);
+
+  try {
+    // Step 1: Insert the agent
+    const { data: newAgent, error: agentError } = await supabase
+      .from('agents')
+      .insert([{ 
+        name: formData.name, 
+        location: formData.location || null 
+      }])
+      .select()
+      .single();
+
+    if (agentError) {
+      console.error('Agent insert error:', agentError);
+      toast.error('Failed to add agent');
+      setSubmitting(false);
       return;
     }
 
-    setSubmitting(true);
-    const { error } = await supabase.from('agents').insert([formData]);
+    // Step 2: Get all systems
+    const { data: systems, error: systemsError } = await supabase
+      .from('systems')
+      .select('id');
 
-    if (!error) {
-      toast.success('Agent added successfully');
-      fetchTotalCount();
-      setCurrentPage(1);
-      setSearchTerm('');
-      await fetchAgents();
-      setShowAddModal(false);
-      setFormData({ name: '', location: '' });
-    } else {
-      toast.error('Failed to add agent');
+    if (systemsError) {
+      console.error('Systems fetch error:', systemsError);
+      await supabase.from('agents').delete().eq('id', newAgent.id);
+      toast.error('Failed to setup agent commissions');
+      setSubmitting(false);
+      return;
     }
+
+    // Step 3: Upsert commissions (insert or update if exists)
+    if (systems && systems.length > 0) {
+      const commissionEntries = systems.map((system) => ({
+        agent_id: newAgent.id,
+        system_id: system.id,
+        commission_percent: 15,
+      }));
+
+      const { error: commissionError } = await supabase
+        .from('agent_system_commissions')
+        .upsert(commissionEntries, { 
+          onConflict: 'agent_id, system_id'
+        });
+
+      if (commissionError) {
+        console.error('Commission insert error:', commissionError);
+        await supabase.from('agents').delete().eq('id', newAgent.id);
+        toast.error('Failed to setup agent commissions');
+        setSubmitting(false);
+        return;
+      }
+    }
+
+    toast.success('Agent added successfully with default 15% commission');
+    fetchTotalCount();
+    setCurrentPage(1);
+    setSearchTerm('');
+    await fetchAgents();
+    setShowAddModal(false);
+    setFormData({ name: '', location: '' });
+
+  } catch (error: any) {
+    console.error('Error:', error);
+    toast.error(error.message || 'Failed to add agent');
+  } finally {
     setSubmitting(false);
   }
+}
 
   async function handleEditAgent(e: React.FormEvent) {
     e.preventDefault();
@@ -154,7 +214,10 @@ export default function AgentsPage() {
     const { error } = await supabase
       .from('agents')
       .delete()
-      .eq('id', selectedAgent?.id) && await supabase.from('cashiers').delete().eq('agent_id', selectedAgent?.id);
+      .eq('id', selectedAgent?.id) && await supabase.from('cashiers').delete().eq('agent_id', selectedAgent?.id) && await supabase
+  .from('agent_system_commissions')
+  .delete()
+  .eq('agent_id', selectedAgent?.id);
 
 
 
@@ -173,6 +236,11 @@ export default function AgentsPage() {
     }
     setSubmitting(false);
   }
+
+    const openAgentCommissionModal = (agent: Agent) => {
+    setAgentId(agent.id);
+    setOpenCommissionModal(true);
+  };
 
   const openEditModal = (agent: Agent) => {
     setSelectedAgent(agent);
@@ -291,6 +359,10 @@ export default function AgentsPage() {
                     </div>
                   </div>
                   <div className="flex items-center space-x-2">
+                    <button onClick={()=>openAgentCommissionModal(agent)} className="p-2 rounded-lg text-gray-500 hover:text-green-600 dark:hover:text-green-400 transition-colors"
+                  >
+                    <FiDollarSign className='w-4 h-4'/>
+                  </button>
                     <button
                       onClick={() => openEditModal(agent)}
                       className="p-2 rounded-lg text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
@@ -519,6 +591,13 @@ export default function AgentsPage() {
           </div>
         </div>
       </Modal>
+
+{openCommissionModal &&
+      <AgentCommissionModal
+  agentId={agentId}
+  open={openCommissionModal}
+  onOpenChange={setOpenCommissionModal}
+/>}
     </div>
   );
 }

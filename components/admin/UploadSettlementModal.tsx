@@ -31,7 +31,7 @@ interface UploadSettlementModalProps {
 
 export default function UploadSettlementModal({ isOpen, onClose, onSuccess }: UploadSettlementModalProps) {
   const [file, setFile] = useState<File | null>(null);
-  const [commission, setCommission] = useState(10);
+/*   const [commission, setCommission] = useState(10); */
   const [systems, setSystems] = useState<any[]>([]);
   const [systemId, setSystemId] = useState('');
   const [selectedSystem, setSelectedSystem] = useState<any>(null);
@@ -169,7 +169,7 @@ export default function UploadSettlementModal({ isOpen, onClose, onSuccess }: Up
     try {
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('commission', String(commission));
+  /*     formData.append('commission', String(commission)); */
       formData.append('systemId', systemId);
       formData.append('week', week);
 
@@ -198,7 +198,7 @@ export default function UploadSettlementModal({ isOpen, onClose, onSuccess }: Up
         // Reset form
         setFile(null);
         setWeek('');
-        setCommission(10);
+        /* setCommission(10); */
         setSystemId('');
         setSelectedSystem(null);
         setUnassignedCashiers([]);
@@ -349,7 +349,7 @@ export default function UploadSettlementModal({ isOpen, onClose, onSuccess }: Up
                           className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
                         />
                       </div>
-                      <div>
+                    {/*   <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                           <FiPercent className="inline w-4 h-4 mr-1" />
                           Commission (%)
@@ -363,7 +363,7 @@ export default function UploadSettlementModal({ isOpen, onClose, onSuccess }: Up
                           step="0.01"
                           className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                         />
-                      </div>
+                      </div> */}
                     </div>
 
                     {/* File Upload Area */}
