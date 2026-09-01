@@ -147,6 +147,8 @@ export default function CashierSettlementReport() {
       );
     }
 
+    
+
     return filtered;
   }, [data, selectedWeek, selectedAgent, selectedSystem, search]);
 
@@ -222,8 +224,7 @@ const exportFormattedExcel = () => {
     const agentGroups = new Map();
 
     filteredData.forEach((item) => {
-      const agentName =
-        item.agent?.name || 'Unknown Agent';
+      const agentName = item.agent?.name || 'Unknown Agent';
 
       if (!agentGroups.has(agentName)) {
         agentGroups.set(agentName, []);
@@ -238,87 +239,79 @@ const exportFormattedExcel = () => {
 
     let grandTotalCalc = 0;
 
-    const agentEntries = Array.from(
-      agentGroups.entries()
+    // Sort agents alphabetically
+    const agentEntries = Array.from(agentGroups.entries()).sort((a, b) => 
+      a[0].localeCompare(b[0])
     );
 
-    agentEntries.forEach(
-      ([agentName, items]: [string, any], index) => {
-        const agentTotal = items.reduce(
-          (sum: number, item: any) =>
-            sum + item.amount,
-          0
-        );
+    agentEntries.forEach(([agentName, items]: [string, any], index) => {
+      const agentTotal = items.reduce((sum: number, item: any) => sum + item.amount, 0);
+      grandTotalCalc += agentTotal;
 
-        grandTotalCalc += agentTotal;
+      // Owner Row
+      exportData.push({
+        A: agentName,
+        B: agentTotal,
+      });
 
-        // Owner Row
-        exportData.push({
-          A: agentName,
-          B: agentTotal,
-        });
+      // Group by system
+      const systemGroups = new Map();
 
-        // Group by system
-        const systemGroups = new Map();
+      items.forEach((item: any) => {
+        const systemName = item.system || 'Unknown';
 
-        items.forEach((item: any) => {
-          const systemName =
-            item.system || 'Unknown';
-
-          if (!systemGroups.has(systemName)) {
-            systemGroups.set(systemName, {
-              total: 0,
-              cashiers: [],
-            });
-          }
-
-          systemGroups.get(systemName).total +=
-            item.amount;
-
-          systemGroups
-            .get(systemName)
-            .cashiers.push({
-              name: item.cashier,
-              amount: item.amount,
-            });
-        });
-
-        // Systems & Cashiers
-        Array.from(systemGroups.entries()).forEach(
-          ([systemName, systemData]: [string, any]) => {
-            exportData.push({
-              A: `  ${systemName}`,
-              B: systemData.total,
-            });
-
-            systemData.cashiers.forEach(
-              (cashier: any) => {
-                exportData.push({
-                  A: `    ${cashier.name}`,
-                  B: cashier.amount,
-                });
-              }
-            );
-          }
-        );
-
-        // Agent Total
-        exportData.push({
-          A: `${agentName} TOTAL`,
-          B: agentTotal,
-        });
-
-        if (
-          index <
-          agentEntries.length - 1
-        ) {
-          exportData.push({
-            A: '',
-            B: '',
+        if (!systemGroups.has(systemName)) {
+          systemGroups.set(systemName, {
+            total: 0,
+            cashiers: [],
           });
         }
+
+        systemGroups.get(systemName).total += item.amount;
+        systemGroups.get(systemName).cashiers.push({
+          name: item.cashier,
+          amount: item.amount,
+        });
+      });
+
+      // Sort systems alphabetically
+      const systemEntries = Array.from(systemGroups.entries()).sort((a, b) => 
+        a[0].localeCompare(b[0])
+      );
+
+      // Systems & Cashiers
+      systemEntries.forEach(([systemName, systemData]: [string, any]) => {
+        exportData.push({
+          A: `  ${systemName}`,
+          B: systemData.total,
+        });
+
+        // Sort cashiers alphabetically within each system
+        const sortedCashiers = systemData.cashiers.sort((a: any, b: any) => 
+          (a.name || '').localeCompare(b.name || '')
+        );
+
+        sortedCashiers.forEach((cashier: any) => {
+          exportData.push({
+            A: `    ${cashier.name}`,
+            B: cashier.amount,
+          });
+        });
+      });
+
+      // Agent Total
+      exportData.push({
+        A: `${agentName} TOTAL`,
+        B: agentTotal,
+      });
+
+      if (index < agentEntries.length - 1) {
+        exportData.push({
+          A: '',
+          B: '',
+        });
       }
-    );
+    });
 
     // Final Grand Total
     exportData.push({
@@ -331,10 +324,9 @@ const exportFormattedExcel = () => {
       B: grandTotalCalc,
     });
 
-    const worksheet =
-      XLSX.utils.json_to_sheet(exportData, {
-        skipHeader: true,
-      });
+    const worksheet = XLSX.utils.json_to_sheet(exportData, {
+      skipHeader: true,
+    });
 
     worksheet['!cols'] = [
       { wch: 40 },
@@ -345,30 +337,16 @@ const exportFormattedExcel = () => {
       worksheet['!ref'] || 'A1:B1'
     );
 
-    for (
-      let row = range.s.r;
-      row <= range.e.r;
-      row++
-    ) {
-      const label =
-        worksheet[`A${row + 1}`]?.v?.toString() ||
-        '';
+    for (let row = range.s.r; row <= range.e.r; row++) {
+      const label = worksheet[`A${row + 1}`]?.v?.toString() || '';
 
       const isTitle = row === 0;
       const isGenerated = row === 1;
       const isHeader = row === 3;
 
-      const isSystemRow =
-        label.startsWith('  ') &&
-        !label.startsWith('    ');
-
-      const isCashierRow =
-        label.startsWith('    ');
-
-      const isTotalRow =
-        label.includes('TOTAL') ||
-        label === 'GRAND TOTAL';
-
+      const isSystemRow = label.startsWith('  ') && !label.startsWith('    ');
+      const isCashierRow = label.startsWith('    ');
+      const isTotalRow = label.includes('TOTAL') || label === 'GRAND TOTAL';
       const isOwnerRow =
         !isTitle &&
         !isGenerated &&
@@ -378,16 +356,11 @@ const exportFormattedExcel = () => {
         !isTotalRow &&
         label !== '';
 
-      for (
-        let col = 0;
-        col <= 1;
-        col++
-      ) {
-        const cellRef =
-          XLSX.utils.encode_cell({
-            r: row,
-            c: col,
-          });
+      for (let col = 0; col <= 1; col++) {
+        const cellRef = XLSX.utils.encode_cell({
+          r: row,
+          c: col,
+        });
 
         if (!worksheet[cellRef]) continue;
 
@@ -412,83 +385,68 @@ const exportFormattedExcel = () => {
         }
 
         worksheet[cellRef].s = {
-font: {
-  bold: true,
-  sz:
-    col === 1 && !isHeader && !isOwnerRow && !isTotalRow
-      ? 12 // Amount column always 12
-      : isHeader
-      ? 18
-      : isOwnerRow || isTotalRow
-      ? 16
-      : 14,
-  color: {
-    rgb: isOwnerRow ? '000000' : '2F5597',
-  },
-},
-
-  fill: {
-    patternType: 'solid',
-    fgColor: {
-      rgb:
-         col === 0
-        ? 'AFC4E8' // DARKER BLUE COLUMN A
-        : 'D9E2F3', // LIGHTER BLUE COLUMN B
-    },
-  },
-
-  alignment: {
-    vertical: 'center',
-    horizontal:
-      col === 1 ? 'right' : 'left',
-  },
-
-  border: {
-    top: {
-      style: 'thin',
-      color: { rgb: '000000' },
-    },
-    bottom: {
-      style: 'thin',
-      color: { rgb: '000000' },
-    },
-    left: {
-      style: 'thin',
-      color: { rgb: '000000' },
-    },
-    right: {
-      style: 'thin',
-      color: { rgb: '000000' },
-    },
-  },
-};
+          font: {
+            bold: true,
+            sz:
+              col === 1 && !isHeader && !isOwnerRow && !isTotalRow
+                ? 12 // Amount column always 12
+                : isHeader
+                ? 18
+                : isOwnerRow || isTotalRow
+                ? 16
+                : 14,
+            color: {
+              rgb: isOwnerRow ? '000000' : '2F5597',
+            },
+          },
+          fill: {
+            patternType: 'solid',
+            fgColor: {
+              rgb: col === 0 ? 'AFC4E8' : 'D9E2F3',
+            },
+          },
+          alignment: {
+            vertical: 'center',
+            horizontal: col === 1 ? 'right' : 'left',
+          },
+          border: {
+            top: {
+              style: 'thin',
+              color: { rgb: '000000' },
+            },
+            bottom: {
+              style: 'thin',
+              color: { rgb: '000000' },
+            },
+            left: {
+              style: 'thin',
+              color: { rgb: '000000' },
+            },
+            right: {
+              style: 'thin',
+              color: { rgb: '000000' },
+            },
+          },
+        };
       }
     }
 
     // Format amount column
-    for (
-      let row = range.s.r;
-      row <= range.e.r;
-      row++
-    ) {
-      const cellRef =
-        XLSX.utils.encode_cell({
-          r: row,
-          c: 1,
-        });
+    for (let row = range.s.r; row <= range.e.r; row++) {
+      const cellRef = XLSX.utils.encode_cell({
+        r: row,
+        c: 1,
+      });
 
       if (
         worksheet[cellRef] &&
-        typeof worksheet[cellRef].v ===
-          'number'
+        typeof worksheet[cellRef].v === 'number'
       ) {
-        worksheet[cellRef].z =
-          '#,##0.00';
+        worksheet[cellRef].z = '#,##0.00';
       }
     }
 
-    const workbook =
-      XLSX.utils.book_new();
+    const workbook = XLSX.utils.book_new();
 
     XLSX.utils.book_append_sheet(
       workbook,
@@ -503,14 +461,10 @@ font: {
         .slice(0, 10)}.xlsx`
     );
 
-    toast.success(
-      'Formatted Excel exported'
-    );
+    toast.success('Formatted Excel exported');
   } catch (error) {
     console.error(error);
-    toast.error(
-      'Failed to export excel'
-    );
+    toast.error('Failed to export excel');
   }
 };
 
